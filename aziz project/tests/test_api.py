@@ -1,0 +1,81 @@
+"""API contract tests for the EcoBiz Copilot endpoints."""
+
+import io
+
+from core import load_data
+
+
+def _post_csv(client, csv_text: str, **params):
+    return client.post(
+        "/api/analyze",
+        params=params,
+        files={"file": ("upload.csv", io.BytesIO(csv_text.encode()), "text/csv")},
+    )
+
+
+def test_health(client):
+    assert client.get("/api/health").json() == {"status": "ok"}
+
+
+def test_analyze_sample_without_file(client):
+    res = client.post("/api/analyze")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["source"] == "sample_data.csv"
+    assert body["summary"]["anomaly_days"] == 7
+    assert len(body["series"]) == 31
+    assert body["worst_day"] is not None
+    assert body["first_anomaly"] == "2025-12-15"
+    assert body["last_anomaly"] == "2025-12-21"
+
+
+def test_upload_csv_matches_core_pipeline(client, sample_csv_bytes):
+    expected = len(load_data(io.BytesIO(sample_csv_bytes)))
+    res = client.post(
+        "/api/analyze", files={"file": ("data.csv", io.BytesIO(sample_csv_bytes), "text/csv")}
+    )
+    assert res.status_code == 200
+    assert len(res.json()["series"]) == expected
+    assert res.json()["source"] == "data.csv"
+
+
+def test_tariff_changes_money_but_not_kwh(client):
+    low = client.post("/api/analyze", params={"tariff": 10}).json()
+    high = client.post("/api/analyze", params={"tariff": 100}).json()
+    assert high["summary"]["savings_kzt"] == low["summary"]["savings_kzt"] * 10
+    assert high["summary"]["total_excess_kwh"] == low["summary"]["total_excess_kwh"]
+    assert high["summary"]["anomaly_days"] == low["summary"]["anomaly_days"]
+
+
+def test_missing_columns_returns_422(client):
+    res = _post_csv(client, "a,b,c\n1,2,3\n")
+    assert res.status_code == 422
+    assert "Missing required columns" in res.json()["detail"]
+
+
+def test_bad_values_return_422(client):
+    res = _post_csv(client, "date,consumption_kwh,is_workday\nnope,not-a-number,1\n")
+    assert res.status_code == 422
+    assert "Invalid values" in res.json()["detail"]
+
+
+def test_empty_rows_return_422(client):
+    res = _post_csv(client, "date,consumption_kwh,is_workday\n")
+    assert res.status_code == 422
+
+
+def test_wrong_extension_returns_415(client):
+    res = client.post("/api/analyze", files={"file": ("notes.txt", b"hello", "text/plain")})
+    assert res.status_code == 415
+
+
+def test_negative_tariff_rejected_on_sample(client):
+    assert client.post("/api/analyze", params={"tariff": -1}).status_code == 422
+
+
+def test_frontend_is_served(client):
+    res = client.get("/")
+    assert res.status_code == 200
+    assert "EcoBiz Copilot" in res.text
+    for asset in ("/app.js", "/styles.css"):
+        assert client.get(asset).status_code == 200

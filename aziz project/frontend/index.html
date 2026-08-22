@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0d1117" />
+  <title>EcoBiz Copilot — Energy Waste Detector</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">🌿</span>
+      <div>
+        <h1>EcoBiz Copilot</h1>
+        <p>Detects electricity waste on days your building should be closed</p>
+      </div>
+    </div>
+    <div class="controls">
+      <label class="field" for="tariff">
+        <span>Tariff</span>
+        <input id="tariff" type="number" step="0.001" min="0" value="17.447" />
+        <span class="unit">KZT/kWh</span>
+      </label>
+      <button id="sample-btn" class="btn ghost" type="button">Load sample</button>
+      <button id="upload-btn" class="btn primary" type="button">
+        Upload CSV / Excel
+        <input id="file-input" type="file" accept=".csv,.xlsx,.xls" hidden />
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <section id="status" class="status hidden" role="alert"></section>
+
+    <section id="loading" class="loading hidden" aria-live="polite">
+      <span class="spinner" aria-hidden="true"></span> Crunching your energy data…
+    </section>
+
+    <noscript><p class="status error">JavaScript is required to use this dashboard.</p></noscript>
+
+    <section id="results" class="hidden">
+      <p class="source-line">
+        Analyzing <strong id="source-name"></strong> · baseline
+        <strong id="baseline-chip" class="chip"></strong>
+        <span class="muted">(25th pct of closed-day usage × 1.5)</span>
+      </p>
+
+      <section id="insight" class="insight hidden"></section>
+
+      <section class="kpis">
+        <article class="kpi red">
+          <span class="kpi-label">Wasted energy</span>
+          <span class="kpi-value" id="kpi-excess">—</span>
+          <span class="kpi-unit">kWh above baseline</span>
+        </article>
+        <article class="kpi amber">
+          <span class="kpi-label">Money lost</span>
+          <span class="kpi-value" id="kpi-kzt">—</span>
+          <span class="kpi-unit">KZT recoverable</span>
+        </article>
+        <article class="kpi green">
+          <span class="kpi-label">CO₂ avoidable</span>
+          <span class="kpi-value" id="kpi-co2">—</span>
+          <span class="kpi-unit">kg emissions</span>
+        </article>
+        <article class="kpi blue">
+          <span class="kpi-label">Flagged days</span>
+          <span class="kpi-value" id="kpi-days">—</span>
+          <span class="kpi-unit" id="days-analyzed">of — days analyzed</span>
+        </article>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Daily consumption</h2>
+          <div class="seg" role="tablist" aria-label="Chart type">
+            <button class="seg-btn active" data-view="bar" type="button">Bars</button>
+            <button class="seg-btn" data-view="line" type="button">Line</button>
+            <button class="seg-btn" data-view="weekly" type="button">Weekly</button>
+            <button class="seg-btn" data-view="cumulative" type="button">Cumulative</button>
+            <button class="seg-btn" data-view="donut" type="button">Donut</button>
+          </div>
+        </div>
+        <div class="chart-sub">
+          <div class="legend">
+            <span><i class="dot workday"></i>Workday</span>
+            <span><i class="dot offday"></i>Closed</span>
+            <span><i class="dot anomaly"></i>Anomaly</span>
+            <span><i class="line"></i>Threshold</span>
+          </div>
+          <div class="hint muted">wheel = zoom · drag = pan · shift+drag = select range · double-click = reset</div>
+        </div>
+        <div id="chart">
+          <div id="chart-info" class="chart-info hidden"></div>
+          <button id="zoom-reset" class="btn ghost hidden" type="button">↺ Reset zoom</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>AI Copilot</h2>
+          <button id="insight-btn" class="btn primary" type="button">✨ Get action plan</button>
+        </div>
+        <div id="insight-loading" class="loading hidden">
+          <span class="spinner" aria-hidden="true"></span> Copilot is thinking…
+        </div>
+        <p id="insight-text" class="insight-text hidden"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>Waste report</h2></div>
+        <div class="table-wrap">
+          <table id="anomaly-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th class="num">Consumption</th>
+                <th class="num">Excess</th>
+                <th class="num">Cost lost</th>
+                <th class="num">CO₂</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="no-anomalies" class="empty hidden">
+          No anomalies detected — this building switches off properly on closed days. 🎉
+        </p>
+      </section>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

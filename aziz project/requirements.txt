@@ -1,3 +1,7 @@
 pandas
 numpy
 openpyxl
+fastapi
+uvicorn[standard]
+python-multipart
+httpx

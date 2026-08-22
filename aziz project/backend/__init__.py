@@ -1,0 +1,1 @@
+"""EcoBiz Copilot backend package."""

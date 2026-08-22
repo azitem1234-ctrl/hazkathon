@@ -22,6 +22,14 @@ def load_data(file_path_or_buffer) -> pd.DataFrame:
     return pd.read_csv(file_path_or_buffer, parse_dates=["date"])
 
 
+def get_baseline(df: pd.DataFrame) -> float:
+    """Closed-building baseline = 25th percentile of non-working-day consumption."""
+    off_days = df.loc[df["is_workday"] == 0, "consumption_kwh"]
+    if off_days.empty:
+        raise ValueError("No non-working days found; cannot build a baseline.")
+    return float(off_days.quantile(0.25))
+
+
 def detect_anomalies(df: pd.DataFrame) -> pd.DataFrame:
     """Flag non-working days whose consumption exceeds the closed-building baseline.
 
@@ -33,10 +41,7 @@ def detect_anomalies(df: pd.DataFrame) -> pd.DataFrame:
     Adds boolean `is_anomaly` and `excess_kwh` (kWh above baseline, else 0).
     """
     df = df.copy()
-    off_days = df.loc[df["is_workday"] == 0, "consumption_kwh"]
-    if off_days.empty:
-        raise ValueError("No non-working days found; cannot build a baseline.")
-    baseline = off_days.quantile(0.25)
+    baseline = get_baseline(df)
 
     over_baseline = (df["is_workday"] == 0) & (
         df["consumption_kwh"] > baseline * BASELINE_MULTIPLIER
