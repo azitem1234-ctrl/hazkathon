@@ -226,7 +226,7 @@ main { max-width: 1080px; margin: 0 auto; padding: 26px 24px 64px; }
   margin-right: 5px;
 }
 
-#chart { position: relative; }
+#chart-wrap { position: relative; }
 #chart svg { width: 100%; height: auto; display: block; }
 #chart.plot svg { cursor: crosshair; }
 
