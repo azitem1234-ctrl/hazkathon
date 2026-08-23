@@ -1,9 +1,0 @@
-pandas
-numpy
-openpyxl
-fastapi
-uvicorn[standard]
-python-multipart
-python-dotenv
-google-genai
-pytest

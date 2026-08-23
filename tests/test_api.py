@@ -27,6 +27,25 @@ def test_analyze_sample_without_file(client):
     assert body["worst_day"] is not None
     assert body["first_anomaly"] == "2025-12-15"
     assert body["last_anomaly"] == "2025-12-21"
+    assert body["summary"]["baseline_reliable"] is True
+
+
+def test_analyze_without_is_workday_uses_kz_calendar(client):
+    """A raw export with only date/consumption_kwh still works: weekends and
+    the Kazakhstan holiday calendar (holidays_kz.json) fill in is_workday."""
+    res = _post_csv(
+        client,
+        "date,consumption_kwh\n"
+        "2026-02-02,400\n"  # Monday -> workday
+        "2026-02-07,80\n",  # Saturday -> non-working
+    )
+    assert res.status_code == 200
+    series = {row["date"]: row for row in res.json()["series"]}
+    assert series["2026-02-02"]["is_workday"] is True
+    assert series["2026-02-07"]["is_workday"] is False
+    # Only one non-working day in this tiny sample: too thin to trust.
+    assert res.json()["summary"]["baseline_reliable"] is False
+    assert res.json()["summary"]["off_day_samples"] == 1
 
 
 def test_upload_csv_matches_core_pipeline(client, sample_csv_bytes):
@@ -79,3 +98,22 @@ def test_frontend_is_served(client):
     assert "EcoBiz Copilot" in res.text
     for asset in ("/app.js", "/styles.css"):
         assert client.get(asset).status_code == 200
+
+
+def test_insight_falls_back_offline_without_api_key(client, monkeypatch):
+    """No GEMINI_API_KEY in this test environment: the demo must still return
+    a usable recommendation instead of a 503, built from the verified numbers."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    analysis = client.post("/api/analyze").json()
+    res = client.post(
+        "/api/insight",
+        json={
+            "source": analysis["source"],
+            "summary": analysis["summary"],
+            "anomalies": [d for d in analysis["series"] if d["is_anomaly"]],
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["model"] == "offline-fallback"
+    assert str(round(analysis["summary"]["total_excess_kwh"], 2)) in body["insight"] or "kWh" in body["insight"]

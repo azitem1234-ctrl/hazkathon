@@ -23,6 +23,11 @@ class Summary(BaseModel):
     tariff_kzt_per_kwh: float = Field(ge=0)
     co2_factor: float
     days_analyzed: int = Field(ge=1)
+    # False when fewer than core.MIN_OFF_DAY_SAMPLES non-working days were
+    # available to build the baseline — the UI/insight text should say so
+    # instead of presenting the numbers as a confirmed result.
+    baseline_reliable: bool = True
+    off_day_samples: int = Field(default=0, ge=0)
 
 
 class AnalyzeResponse(BaseModel):

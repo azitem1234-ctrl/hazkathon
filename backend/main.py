@@ -16,9 +16,11 @@ from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from calendar_utils import add_workday_column, load_off_periods_from_json
 from core import (
     BASELINE_MULTIPLIER,
     CO2_KG_PER_KWH,
+    DEFAULT_CALENDAR_PATH,
     TARIFF_KZT_PER_KWH,
     calculate_impact,
     detect_anomalies,
@@ -30,7 +32,9 @@ from backend.ai import AIUnavailable, ask_gemini
 ROOT = Path(__file__).resolve().parent.parent
 SAMPLE_CSV = ROOT / "data" / "sample_data.csv"
 FRONTEND_DIR = ROOT / "frontend"
-REQUIRED_COLUMNS = {"date", "consumption_kwh", "is_workday"}
+# is_workday is optional: when the upload omits it, we derive it from weekends
+# plus the Kazakhstan public-holiday/school-break calendar (holidays_kz.json).
+REQUIRED_COLUMNS = {"date", "consumption_kwh"}
 ALLOWED_SUFFIXES = (".csv", ".xlsx", ".xls")
 
 app = FastAPI(title="EcoBiz Copilot", version="2.1.0")
@@ -72,10 +76,15 @@ def _clean(df: pd.DataFrame) -> pd.DataFrame:
         raise HTTPException(
             422, f"Invalid values: {bad_dates} bad date(s), {bad_kwh} bad kWh value(s)."
         )
-    workday = pd.to_numeric(out["is_workday"], errors="coerce")
-    if workday.isna().any():
-        raise HTTPException(422, "'is_workday' must be 0 or 1 on every row.")
-    out["is_workday"] = workday.astype(int)
+
+    if "is_workday" in out.columns:
+        workday = pd.to_numeric(out["is_workday"], errors="coerce")
+        if workday.isna().any():
+            raise HTTPException(422, "'is_workday' must be 0 or 1 on every row.")
+        out["is_workday"] = workday.astype(int)
+    else:
+        calendar_periods = load_off_periods_from_json(DEFAULT_CALENDAR_PATH)
+        out = add_workday_column(out, extra_off_periods=calendar_periods)
     return out
 
 
@@ -105,6 +114,8 @@ def _analyze(df: pd.DataFrame, tariff: float) -> AnalyzeResponse:
             tariff_kzt_per_kwh=tariff,
             co2_factor=CO2_KG_PER_KWH,
             days_analyzed=int(len(flagged)),
+            baseline_reliable=bool(flagged.attrs["baseline_reliable"]),
+            off_day_samples=int(flagged.attrs["off_day_samples"]),
         ),
         series=series,
         source="",
@@ -144,9 +155,62 @@ async def analyze(file: UploadFile | None = None, tariff: float = TARIFF_KZT_PER
     return result
 
 
+def _fallback_insight(req: InsightRequest) -> str:
+    """Offline recommendation used when Gemini is unreachable or unconfigured.
+
+    The demo must survive a venue with no Wi-Fi or an expired API key, so this
+    reuses the same four-section structure as the Gemini prompt but fills it
+    with a templated explanation instead of a model call. Every figure comes
+    straight from the verified analysis, never invented.
+    """
+    s = req.summary
+    dates = ", ".join(a.date for a in sorted(req.anomalies, key=lambda x: x.excess_kwh, reverse=True)[:5])
+    reliability_note = (
+        ""
+        if s.baseline_reliable
+        else (
+            f"\n\n*Note: the baseline rests on only {s.off_day_samples} non-working day(s) "
+            "in this dataset — collect a longer history before treating it as confirmed.*"
+        )
+    )
+    return (
+        f"## Summary\n"
+        f"Over {s.days_analyzed} days, {s.anomaly_days} closed day(s) ran as if the building "
+        f"were occupied, wasting {s.total_excess_kwh} kWh (~{s.savings_kzt:.0f} KZT at "
+        f"{s.tariff_kzt_per_kwh} KZT/kWh, {s.co2_saved_kg} kg CO2)."
+        + (f" Flagged dates: {dates}." if dates else "")
+        + f"{reliability_note}\n\n"
+        "## What likely happened\n"
+        "1. **HVAC/heating left on a standard schedule** — the most common cause when "
+        "consumption on a closed day stays close to the workday level instead of dropping "
+        "toward the baseline.\n"
+        "2. **Lighting or ventilation timers not updated for the closed period** — timers "
+        "set for term time keep running unchanged through holidays and weekends.\n"
+        "3. **Equipment/servers left in active mode** — plug loads that are never switched "
+        "to standby will show up as a flat, unexplained excess.\n\n"
+        "## Corrective actions\n"
+        "1. Have the caretaker/BMS technician check the heating and ventilation schedule "
+        "for the flagged dates and switch it to a low-power holiday mode.\n"
+        "2. Walk the building on the next closed day to confirm which systems are still "
+        "running at full power.\n"
+        "3. If a BMS exists, add explicit calendar overrides for weekends and school "
+        "breaks instead of relying on the default weekly schedule.\n\n"
+        "## Prevention & monitoring\n"
+        "Add the closed-day baseline as an alarm threshold, and review this report after "
+        "every holiday period so a missed override is caught within days, not months.\n\n"
+        "*(Offline fallback — Gemini was unavailable, so this recommendation was generated "
+        "locally from the verified numbers above, not by the AI model.)*"
+    )
+
+
 @app.post("/api/insight", response_model=InsightResponse)
 async def insight(req: InsightRequest):
-    """Turn the current analysis into concrete recommendations via Gemini."""
+    """Turn the current analysis into concrete recommendations via Gemini.
+
+    Falls back to a locally templated recommendation (still built from the
+    verified numbers, never invented) when Gemini has no key, no network, or
+    errors out — so a live demo never breaks because of connectivity.
+    """
     s = req.summary
     lines = [
         f"Dataset: {req.source} ({s.days_analyzed} days of daily electricity data for a building).",
@@ -190,9 +254,11 @@ async def insight(req: InsightRequest):
 
     try:
         text = ask_gemini(prompt)
-    except AIUnavailable as exc:
-        raise HTTPException(503, str(exc)) from exc
-    return InsightResponse(insight=text, model=os.environ.get("GEMINI_MODEL", "gemini-3.6-flash"))
+        model = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
+    except AIUnavailable:
+        text = _fallback_insight(req)
+        model = "offline-fallback"
+    return InsightResponse(insight=text, model=model)
 
 
 @app.get("/api/health")
