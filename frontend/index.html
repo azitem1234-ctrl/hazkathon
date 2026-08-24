@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0d1117" />
-  <title>EcoBiz Copilot — детектор потерь энергии</title>
+  <title>EcoBiz Copilot - детектор потерь энергии</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>" />
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -76,17 +76,17 @@
           <article class="kpi blue">
             <span class="kpi-label">Аномальных дней</span>
             <span class="kpi-value" id="kpi-days">—</span>
-            <span class="kpi-unit" id="days-analyzed">из — дней проанализировано</span>
+            <span class="kpi-unit" id="days-analyzed">из - дней проанализировано</span>
           </article>
           <article class="kpi teal">
             <span class="kpi-label">Прогноз экономии за 3 месяца</span>
-            <span class="kpi-value" id="kpi-quarterly">—</span>
+            <span class="kpi-value" id="kpi-quarterly">-</span>
             <span class="kpi-unit">тенге за 3 месяца</span>
             <span class="kpi-note">проекция при аналогичной динамике потребления, не гарантированный результат</span>
           </article>
           <article class="kpi purple">
             <span class="kpi-label">Прогноз экономии за год</span>
-            <span class="kpi-value" id="kpi-yearly">—</span>
+            <span class="kpi-value" id="kpi-yearly">-</span>
             <span class="kpi-unit">тенге в год</span>
             <span class="kpi-note">проекция при аналогичной динамике потребления, не гарантированный результат</span>
           </article>
@@ -127,7 +127,7 @@
             <button id="insight-btn" class="btn primary" type="button">✨ Получить план действий</button>
           </div>
           <div id="insight-loading" class="loading hidden">
-            <span class="spinner" aria-hidden="true"></span> Копилот думает…
+            <span class="spinner" aria-hidden="true"></span> Копилот готовит🔥🔥🔥...
           </div>
           <p id="insight-text" class="insight-text hidden"></p>
         </section>
@@ -154,7 +154,7 @@
             </table>
           </div>
           <p id="no-anomalies" class="empty hidden">
-            Аномалий не обнаружено — здание корректно отключается в нерабочие дни. 🎉
+            Аномалий не обнаружено - здание корректно отключается в нерабочие дни. 🎉
           </p>
         </section>
       </section>
@@ -164,20 +164,21 @@
           <div class="card-head"><h2>Как работает детекция</h2></div>
           <div class="method-text">
             <ol>
-              <li>Берём только нерабочие дни — из файла (колонка <code>is_workday</code>) или
+              <li>Берём только нерабочие дни - из файла (колонка <code>is_workday</code>) или
                 автоматически по календарю выходных и праздников Казахстана.</li>
-              <li>Базовый уровень = 25-й перцентиль их потребления — устойчив к тем самым выбросам,
+              <li>Базовый уровень = 25-ый перцентиль их потребления-устойчив к тем самым выбросам,
                 которые мы пытаемся найти, в отличие от обычного среднего.</li>
               <li>День считается аномалией, если потребление превышает базовый уровень, умноженный
                 на порог (по умолчанию ×1.5).</li>
-              <li>Превышение в аномальный день = фактическое потребление − базовый уровень.</li>
+              <li>Превышение в аномальный день = фактическое потребление - базовый уровень.</li>
               <li>Экономия в тенге = превышение × тариф; экономия CO₂ = превышение × коэффициент CO₂.</li>
+              <li>Надеюсь всем все понятно!!!</li>
             </ol>
             <p class="muted">
-              Это статистическое обнаружение аномалий во временном ряде, а не нейросеть — осознанный
-              выбор для MVP: метод честный, объяснимый на защите и достаточный для такого объёма данных.
+              Это статистическое обнаружение аномалий во временном ряде, а не нейросеть - осознанный
+              выбор для MVP: метод конкренто честный, объяснимый на защите и достаточный для такого объёма данных.
               Gemini решает другую, отдельную задачу: превращает уже проверенные цифры в план действий
-              для менеджера — каждое число и дата в рекомендации берутся из расчёта, модель их не придумывает.
+              для менеджера - каждое число и дата в рекомендации берутся из расчёта, модель их не придумывает!!!!!!Это так, к слову если что.
             </p>
           </div>
           <div class="threshold-slider">
@@ -186,7 +187,7 @@
             </label>
             <input id="multiplier-slider" type="range" min="1.2" max="2.0" step="0.1" value="1.5" />
             <p class="muted">Подвиньте ползунок, чтобы пересчитать график и карточки с другим порогом
-              чувствительности — без изменения самого метода детекции.</p>
+              чувствительности - без изменения самого метода детекции.</p>
           </div>
         </section>
       </section>
