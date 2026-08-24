@@ -67,8 +67,11 @@ function reqTimeout(ms) {
 
 let currentMultiplier = 1.5;
 
-async function analyze(formData) {
+async function analyze(formData, label) {
   $("results").classList.add("hidden");
+  $("loading-text").textContent = label
+    ? `Анализируем «${label}»…`
+    : "Анализируем данные по энергопотреблению…";
   setLoading(true);
   try {
     const tariff = encodeURIComponent($("tariff").value);
@@ -685,7 +688,10 @@ $("file-input").addEventListener("change", (e) => {
   if (file) {
     const formData = new FormData();
     formData.append("file", file);
-    analyze(formData); // re-renders the dashboard and resets the AI Copilot panel
+    // Passing the filename makes the loading state show which file is
+    // actually being analyzed, so it's never silently unclear whether an
+    // upload was picked up.
+    analyze(formData, file.name); // re-renders the dashboard and resets the AI Copilot panel
   }
   e.target.value = "";
 });

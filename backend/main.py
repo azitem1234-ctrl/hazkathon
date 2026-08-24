@@ -15,6 +15,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.types import Scope
 
 from calendar_utils import add_workday_column, load_off_periods_from_json
 from core import (
@@ -300,7 +301,22 @@ async def health():
     return {"status": "ok"}
 
 
-app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+class NoCacheStaticFiles(StaticFiles):
+    """Force browsers to revalidate the frontend bundle on every load.
+
+    Without this, a redeploy can silently leave users running a stale
+    cached app.js — invisible bugs, "fixed" code that still misbehaves.
+    Correctness beats the (negligible, for a dashboard this size) cost
+    of an extra conditional request per file.
+    """
+
+    async def get_response(self, path: str, scope: Scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+app.mount("/", NoCacheStaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 
 
 if __name__ == "__main__":
