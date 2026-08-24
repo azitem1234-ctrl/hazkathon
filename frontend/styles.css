@@ -10,6 +10,7 @@
   --amber: #d29922;
   --blue: #58a6ff;
   --purple: #a371f7;
+  --teal: #39c5cf;
   --radius: 12px;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
@@ -182,6 +183,7 @@ main { max-width: 1080px; margin: 0 auto; padding: 26px 24px 64px; }
 .kpi.green .kpi-value { color: var(--accent); }
 .kpi.blue .kpi-value { color: var(--blue); }
 .kpi.purple .kpi-value { color: var(--purple); }
+.kpi.teal .kpi-value { color: var(--teal); }
 .kpi-note { font-size: 11px; color: var(--muted); font-style: italic; line-height: 1.35; margin-top: 2px; }
 
 /* ---------- Cards ---------- */

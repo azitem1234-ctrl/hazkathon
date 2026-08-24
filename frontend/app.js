@@ -113,6 +113,7 @@ function render(data) {
   $("kpi-kzt").textContent = fmt(s.savings_kzt);
   $("kpi-co2").textContent = fmt(s.co2_saved_kg, 1);
   $("kpi-days").textContent = s.anomaly_days;
+  $("kpi-quarterly").textContent = fmt(s.savings_kzt * 3);
   $("kpi-yearly").textContent = fmt(s.savings_kzt * 12);
 
   renderInsight(data);
@@ -774,6 +775,7 @@ function buildReportHtml() {
     <div>Потери в тенге: <strong>${fmt(s.savings_kzt)} тенге</strong></div>
     <div>Экономия CO₂: <strong>${fmt(s.co2_saved_kg, 1)} кг</strong></div>
     <div>Аномальных дней: <strong>${s.anomaly_days} из ${s.days_analyzed}</strong></div>
+    <div>Прогноз экономии за 3 месяца: <strong>${fmt(s.savings_kzt * 3)} тенге</strong> (проекция, не гарантия)</div>
     <div>Прогноз экономии за год: <strong>${fmt(s.savings_kzt * 12)} тенге</strong> (проекция, не гарантия)</div>
     <div>Базовый уровень: <strong>${fmt(s.baseline_kwh, 1)} кВт·ч</strong> (порог ×${fmt(s.multiplier, 1)})</div>
   </div>
