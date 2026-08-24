@@ -682,7 +682,11 @@ $("upload-btn").addEventListener("click", () => $("file-input").click());
 
 $("file-input").addEventListener("change", (e) => {
   const file = e.target.files[0];
-  if (file) analyze(new FormData([["file", file]]));
+  if (file) {
+    const formData = new FormData();
+    formData.append("file", file);
+    analyze(formData); // re-renders the dashboard and resets the AI Copilot panel
+  }
   e.target.value = "";
 });
 
