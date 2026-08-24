@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0d1117" />
-  <title>EcoBiz Copilot — детектор потерь энергии</title>
+  <title>EcoBiz - детектор потерь энергии</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>" />
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -52,7 +52,7 @@
         <p class="source-line">
           Анализируем <strong id="source-name"></strong> · базовый уровень
           <strong id="baseline-chip" class="chip"></strong>
-          <span class="muted">(25-й перцентиль потребления в нерабочие дни × <span id="multiplier-chip">1.5</span>)</span>
+          <span class="muted">(25-й процент потребления в нерабочие дни × <span id="multiplier-chip">1.5</span>)</span>
         </p>
 
         <section id="insight" class="insight hidden"></section>
@@ -76,7 +76,7 @@
           <article class="kpi blue">
             <span class="kpi-label">Аномальных дней</span>
             <span class="kpi-value" id="kpi-days">—</span>
-            <span class="kpi-unit" id="days-analyzed">из — дней проанализировано</span>
+            <span class="kpi-unit" id="days-analyzed">из - дней проанализировано</span>
           </article>
           <article class="kpi teal">
             <span class="kpi-label">Прогноз экономии за 3 месяца</span>
@@ -110,7 +110,7 @@
               <span><i class="dot anomaly"></i>Аномалия</span>
               <span><i class="line"></i>Порог</span>
             </div>
-            <div class="hint muted">колесо = масштаб · перетаскивание = сдвиг · shift+перетаскивание = выбор диапазона · двойной клик = сброс</div>
+            <div class="hint muted">колесо = масштаб · перетаскивание = выбор диапазона · двойной клик = сброс</div>
           </div>
           <div id="chart-wrap">
             <div id="chart-info" class="chart-info hidden"></div>
@@ -123,11 +123,11 @@
       <section id="tab-ai" class="tab-panel hidden" role="tabpanel">
         <section class="card">
           <div class="card-head">
-            <h2>AI Copilot</h2>
+            <h2>AI Copilot EcoBiz</h2>
             <button id="insight-btn" class="btn primary" type="button">✨ Получить план действий</button>
           </div>
           <div id="insight-loading" class="loading hidden">
-            <span class="spinner" aria-hidden="true"></span> Копилот думает…
+            <span class="spinner" aria-hidden="true"></span> Copilot is thinking... oooor cooking🔥🔥🔥🔥🔥js let him cook sir...
           </div>
           <p id="insight-text" class="insight-text hidden"></p>
         </section>
