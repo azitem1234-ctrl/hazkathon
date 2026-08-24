@@ -36,6 +36,10 @@ FRONTEND_DIR = ROOT / "frontend"
 # plus the Kazakhstan public-holiday/school-break calendar (holidays_kz.json).
 REQUIRED_COLUMNS = {"date", "consumption_kwh"}
 ALLOWED_SUFFIXES = (".csv", ".xlsx", ".xls")
+# Real-world exports label the reading column differently; map the common
+# aliases to our canonical name before validating — the numbers themselves
+# are never touched, only the header.
+CONSUMPTION_KWH_ALIASES = {"kwh", "consumption", "usage_kwh", "energy_kwh", "kwh_consumed"}
 
 app = FastAPI(title="EcoBiz Copilot", version="2.1.0")
 app.add_middleware(
@@ -59,6 +63,12 @@ def _to_frame(raw: bytes | Path, filename: str) -> pd.DataFrame:
 
 def _clean(df: pd.DataFrame) -> pd.DataFrame:
     """Validate required columns and coerce types with clear error messages."""
+    if "consumption_kwh" not in df.columns:
+        for col in df.columns:
+            if col.strip().lower() in CONSUMPTION_KWH_ALIASES:
+                df = df.rename(columns={col: "consumption_kwh"})
+                break
+
     missing = REQUIRED_COLUMNS - set(df.columns)
     if missing:
         raise HTTPException(

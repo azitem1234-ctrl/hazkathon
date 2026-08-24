@@ -66,6 +66,21 @@ def test_tariff_changes_money_but_not_kwh(client):
     assert high["summary"]["anomaly_days"] == low["summary"]["anomaly_days"]
 
 
+def test_kwh_column_alias_is_accepted(client):
+    """Real-world exports sometimes call the reading column 'kwh' instead of
+    'consumption_kwh' — that should still work, not 422."""
+    res = _post_csv(
+        client,
+        "date,kwh,is_workday\n"
+        "2026-02-02,400,1\n"
+        "2026-02-07,80,0\n",
+    )
+    assert res.status_code == 200
+    series = {row["date"]: row for row in res.json()["series"]}
+    assert series["2026-02-02"]["consumption_kwh"] == 400.0
+    assert series["2026-02-07"]["consumption_kwh"] == 80.0
+
+
 def test_multiplier_changes_anomaly_count(client):
     loose = client.post("/api/analyze", params={"multiplier": 1.2}).json()
     default = client.post("/api/analyze", params={"multiplier": 1.5}).json()
