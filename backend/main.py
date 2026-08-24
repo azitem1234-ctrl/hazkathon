@@ -54,7 +54,7 @@ def _to_frame(raw: bytes | Path, filename: str) -> pd.DataFrame:
             return pd.read_excel(handle)
         return pd.read_csv(handle)
     except Exception as exc:
-        raise HTTPException(400, f"Could not read '{filename}': {exc}") from exc
+        raise HTTPException(400, f"Не удалось прочитать «{filename}»: {exc}") from exc
 
 
 def _clean(df: pd.DataFrame) -> pd.DataFrame:
@@ -62,10 +62,10 @@ def _clean(df: pd.DataFrame) -> pd.DataFrame:
     missing = REQUIRED_COLUMNS - set(df.columns)
     if missing:
         raise HTTPException(
-            422, f"Missing required columns: {', '.join(sorted(missing))}"
+            422, f"Отсутствуют обязательные колонки: {', '.join(sorted(missing))}"
         )
     if df.empty:
-        raise HTTPException(422, "The file contains no data rows.")
+        raise HTTPException(422, "Файл не содержит строк с данными.")
 
     out = df.copy()
     out["date"] = pd.to_datetime(out["date"], errors="coerce")
@@ -74,13 +74,15 @@ def _clean(df: pd.DataFrame) -> pd.DataFrame:
     bad_kwh = int(out["consumption_kwh"].isna().sum())
     if bad_dates or bad_kwh:
         raise HTTPException(
-            422, f"Invalid values: {bad_dates} bad date(s), {bad_kwh} bad kWh value(s)."
+            422,
+            f"Некорректные значения: {bad_dates} неверных дат(ы), "
+            f"{bad_kwh} неверных значений кВт·ч.",
         )
 
     if "is_workday" in out.columns:
         workday = pd.to_numeric(out["is_workday"], errors="coerce")
         if workday.isna().any():
-            raise HTTPException(422, "'is_workday' must be 0 or 1 on every row.")
+            raise HTTPException(422, "Колонка 'is_workday' должна содержать только 0 или 1 в каждой строке.")
         out["is_workday"] = workday.astype(int)
     else:
         calendar_periods = load_off_periods_from_json(DEFAULT_CALENDAR_PATH)
@@ -88,9 +90,9 @@ def _clean(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _analyze(df: pd.DataFrame, tariff: float) -> AnalyzeResponse:
+def _analyze(df: pd.DataFrame, tariff: float, multiplier: float) -> AnalyzeResponse:
     """Run the full pipeline and shape a JSON-friendly response."""
-    flagged = detect_anomalies(df)
+    flagged = detect_anomalies(df, multiplier=multiplier)
     impact = calculate_impact(flagged, tariff=tariff)
 
     series = [
@@ -110,7 +112,7 @@ def _analyze(df: pd.DataFrame, tariff: float) -> AnalyzeResponse:
         summary=Summary(
             **impact,
             baseline_kwh=round(get_baseline(flagged), 2),
-            multiplier=BASELINE_MULTIPLIER,
+            multiplier=multiplier,
             tariff_kzt_per_kwh=tariff,
             co2_factor=CO2_KG_PER_KWH,
             days_analyzed=int(len(flagged)),
@@ -126,9 +128,15 @@ def _analyze(df: pd.DataFrame, tariff: float) -> AnalyzeResponse:
 
 
 @app.post("/api/analyze")
-async def analyze(file: UploadFile | None = None, tariff: float = TARIFF_KZT_PER_KWH):
+async def analyze(
+    file: UploadFile | None = None,
+    tariff: float = TARIFF_KZT_PER_KWH,
+    multiplier: float = BASELINE_MULTIPLIER,
+):
     if tariff < 0:
-        raise HTTPException(422, "Tariff cannot be negative.")
+        raise HTTPException(422, "Тариф не может быть отрицательным.")
+    if multiplier <= 0:
+        raise HTTPException(422, "Множитель порога аномалии должен быть положительным.")
 
     if file is None or not file.filename:
         source: bytes | Path = SAMPLE_CSV
@@ -136,20 +144,20 @@ async def analyze(file: UploadFile | None = None, tariff: float = TARIFF_KZT_PER
     else:
         if not file.filename.lower().endswith(ALLOWED_SUFFIXES):
             raise HTTPException(
-                415, f"Unsupported file type; use {', '.join(ALLOWED_SUFFIXES)}"
+                415, f"Неподдерживаемый тип файла; используйте {', '.join(ALLOWED_SUFFIXES)}"
             )
         source = await file.read()
         label = file.filename
 
     try:
         df = _clean(_to_frame(source, label))
-        result = _analyze(df, tariff)
+        result = _analyze(df, tariff, multiplier)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(400, f"Analysis failed for '{label}': {exc}") from exc
+        raise HTTPException(400, f"Не удалось проанализировать «{label}»: {exc}") from exc
 
     result.source = label
     return result
@@ -169,37 +177,42 @@ def _fallback_insight(req: InsightRequest) -> str:
         ""
         if s.baseline_reliable
         else (
-            f"\n\n*Note: the baseline rests on only {s.off_day_samples} non-working day(s) "
-            "in this dataset — collect a longer history before treating it as confirmed.*"
+            f"\n\n*Примечание: базовый уровень рассчитан всего по {s.off_day_samples} "
+            "нерабочему(им) дню(дням) в этом наборе данных — соберите более длинную историю, "
+            "прежде чем считать его подтверждённым.*"
         )
     )
     return (
-        f"## Summary\n"
-        f"Over {s.days_analyzed} days, {s.anomaly_days} closed day(s) ran as if the building "
-        f"were occupied, wasting {s.total_excess_kwh} kWh (~{s.savings_kzt:.0f} KZT at "
-        f"{s.tariff_kzt_per_kwh} KZT/kWh, {s.co2_saved_kg} kg CO2)."
-        + (f" Flagged dates: {dates}." if dates else "")
+        f"## Сводка\n"
+        f"За {s.days_analyzed} дн. в {s.anomaly_days} нерабочий(их) день(дней) здание "
+        f"потребляло энергию так, будто было занято людьми: перерасход составил "
+        f"{s.total_excess_kwh} кВт·ч (~{s.savings_kzt:.0f} тенге при тарифе "
+        f"{s.tariff_kzt_per_kwh} тенге/кВт·ч, {s.co2_saved_kg} кг CO₂)."
+        + (f" Аномальные даты: {dates}." if dates else "")
         + f"{reliability_note}\n\n"
-        "## What likely happened\n"
-        "1. **HVAC/heating left on a standard schedule** — the most common cause when "
-        "consumption on a closed day stays close to the workday level instead of dropping "
-        "toward the baseline.\n"
-        "2. **Lighting or ventilation timers not updated for the closed period** — timers "
-        "set for term time keep running unchanged through holidays and weekends.\n"
-        "3. **Equipment/servers left in active mode** — plug loads that are never switched "
-        "to standby will show up as a flat, unexplained excess.\n\n"
-        "## Corrective actions\n"
-        "1. Have the caretaker/BMS technician check the heating and ventilation schedule "
-        "for the flagged dates and switch it to a low-power holiday mode.\n"
-        "2. Walk the building on the next closed day to confirm which systems are still "
-        "running at full power.\n"
-        "3. If a BMS exists, add explicit calendar overrides for weekends and school "
-        "breaks instead of relying on the default weekly schedule.\n\n"
-        "## Prevention & monitoring\n"
-        "Add the closed-day baseline as an alarm threshold, and review this report after "
-        "every holiday period so a missed override is caught within days, not months.\n\n"
-        "*(Offline fallback — Gemini was unavailable, so this recommendation was generated "
-        "locally from the verified numbers above, not by the AI model.)*"
+        "## Что вероятно произошло\n"
+        "1. **Отопление или вентиляция остались в обычном рабочем режиме** — самая частая "
+        "причина, когда потребление в нерабочий день остаётся близким к рабочему уровню "
+        "вместо снижения до базового значения.\n"
+        "2. **Таймеры освещения или вентиляции не обновлены под нерабочий период** — "
+        "таймеры, настроенные на рабочий график, продолжают работать без изменений в "
+        "выходные и каникулы.\n"
+        "3. **Оборудование или серверы остались в активном режиме** — нагрузки, которые "
+        "никогда не переводятся в режим ожидания, дают именно такой ровный необъяснимый "
+        "перерасход.\n\n"
+        "## Меры по исправлению\n"
+        "1. Попросите завхоза или техника BMS проверить график отопления и вентиляции на "
+        "отмеченные даты и переключить его в энергосберегающий режим на нерабочие дни.\n"
+        "2. Пройдите по зданию в следующий нерабочий день, чтобы проверить, какие системы "
+        "всё ещё работают на полную мощность.\n"
+        "3. Если есть система BMS, добавьте явные календарные исключения для выходных и "
+        "каникул вместо стандартного недельного расписания.\n\n"
+        "## Профилактика и мониторинг\n"
+        "Добавьте базовый уровень нерабочего дня как порог тревоги и проверяйте этот отчёт "
+        "после каждого периода каникул, чтобы пропущенное исключение обнаруживалось за "
+        "несколько дней, а не месяцев.\n\n"
+        "*(Офлайн-режим — Gemini был недоступен, поэтому эта рекомендация сформирована "
+        "локально на основе проверенных цифр выше, а не моделью ИИ.)*"
     )
 
 
@@ -213,43 +226,54 @@ async def insight(req: InsightRequest):
     """
     s = req.summary
     lines = [
-        f"Dataset: {req.source} ({s.days_analyzed} days of daily electricity data for a building).",
-        f"Closed-building baseline: {s.baseline_kwh} kWh; anomaly threshold: baseline x {s.multiplier}.",
+        f"Набор данных: {req.source} ({s.days_analyzed} дн. суточных данных электропотребления здания).",
         (
-            f"Found {s.anomaly_days} closed day(s) running as if occupied, wasting "
-            f"{s.total_excess_kwh} kWh total (~{s.savings_kzt:.0f} KZT at {s.tariff_kzt_per_kwh} KZT/kWh, "
-            f"{s.co2_saved_kg} kg CO2)."
+            f"Базовый уровень нерабочего дня: {s.baseline_kwh} кВт·ч; "
+            f"порог аномалии: базовый уровень x {s.multiplier}."
+        ),
+        (
+            f"Обнаружено {s.anomaly_days} нерабочих день(дней), когда здание потребляло "
+            f"энергию как занятое: суммарный перерасход {s.total_excess_kwh} кВт·ч "
+            f"(~{s.savings_kzt:.0f} тенге при тарифе {s.tariff_kzt_per_kwh} тенге/кВт·ч, "
+            f"{s.co2_saved_kg} кг CO₂)."
         ),
     ]
     if req.anomalies:
         top = ", ".join(
-            f"{a.date} (+{a.excess_kwh} kWh over {a.consumption_kwh} kWh)"
+            f"{a.date} (+{a.excess_kwh} кВт·ч сверх {a.consumption_kwh} кВт·ч)"
             for a in sorted(req.anomalies, key=lambda x: x.excess_kwh, reverse=True)[:5]
         )
-        lines.append(f"Flagged dates (worst first): {top}.")
+        lines.append(f"Отмеченные даты (от самой затратной): {top}.")
     else:
-        lines.append("No anomalies were detected in this dataset.")
+        lines.append("В этом наборе данных аномалий не обнаружено.")
 
     prompt = "\n".join(lines) + (
-        "\n\nYou are a senior building energy-efficiency consultant writing directly for the "
-        "facility manager. Write a DETAILED action plan in Markdown with exactly these sections:"
-        "\n\n## Summary"
-        "\nTwo or three sentences quantifying the problem using the exact kWh, KZT and CO₂ "
-        "figures and the flagged dates above."
-        "\n\n## What likely happened"
-        "\nRank the 2-4 most probable root causes (HVAC schedules, lighting timers, plug loads / "
-        "equipment left on, IT servers, security systems, holiday overrides missing). For each: "
-        "explain WHY you suspect it, comparing the flagged consumption against the baseline and "
-        "typical workday levels in the data."
-        "\n\n## Corrective actions"
-        "\nNumbered, concrete steps. For each step say what exactly to inspect or change, who "
-        "should do it (BMS technician, caretaker, IT, management) and estimate the expected "
-        "recovery in kWh/day and KZT/year where possible."
-        "\n\n## Prevention & monitoring"
-        "\nSpecific controls: BMS calendar overrides for holidays/breaks, sub-metering, alarm "
-        "thresholds based on the closed-day baseline, and how often someone should review the data."
-        "\n\nRules: use only the dates/figures provided; quantify every claim; no generic filler, "
-        "no greetings, no closing pleasantries."
+        "\n\nТы — старший консультант по энергоэффективности зданий и пишешь напрямую для "
+        "управляющего зданием. Напиши ПОДРОБНЫЙ план действий на русском языке в формате "
+        "Markdown строго со следующими разделами (заголовки тоже должны быть на русском):"
+        "\n\n## Сводка"
+        "\nДва-три предложения, количественно описывающих проблему с использованием точных "
+        "цифр в кВт·ч, тенге и CO₂ и отмеченных дат выше."
+        "\n\n## Что вероятно произошло"
+        "\nНазови 2-4 наиболее вероятные категории причин словами (например: график "
+        "отопления/вентиляции, таймеры освещения, оборудование или розеточная нагрузка "
+        "оставлены включёнными, IT-серверы, системы охраны, отсутствие календарных "
+        "исключений на праздники). Для каждой категории объясни, ПОЧЕМУ ты её подозреваешь, "
+        "сравнивая отмеченное потребление с базовым уровнем и типичным рабочим уровнем в "
+        "данных — только словами и категориями, без числовых оценок по видам оборудования."
+        "\n\n## Меры по исправлению"
+        "\nПронумерованные, конкретные шаги. Для каждого шага укажи, что именно нужно "
+        "проверить или изменить и кто должен это сделать (техник BMS, завхоз, IT, "
+        "руководство) — не придумывай новых числовых показателей сверх переданных выше."
+        "\n\n## Профилактика и мониторинг"
+        "\nКонкретные меры контроля: календарные исключения BMS на праздники/каникулы, "
+        "суб-счётчики, пороги тревоги на основе базового уровня нерабочего дня, и как часто "
+        "нужно проверять данные."
+        "\n\nПравила: используй только даты и цифры, приведённые выше; отвечай ТОЛЬКО на "
+        "русском языке, включая заголовки разделов; не указывай числовые оценки "
+        "энергопотребления по типам оборудования или отдельным системам — у тебя нет данных "
+        "для этого, только переданные тебе агрегированные цифры и общие категории причин; "
+        "никакого общего наполнителя, приветствий и прощаний."
     )
 
     try:

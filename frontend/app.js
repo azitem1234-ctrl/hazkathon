@@ -65,22 +65,25 @@ function reqTimeout(ms) {
   }
 }
 
+let currentMultiplier = 1.5;
+
 async function analyze(formData) {
   $("results").classList.add("hidden");
   setLoading(true);
   try {
     const tariff = encodeURIComponent($("tariff").value);
-    const res = await apiPost(`/api/analyze?tariff=${tariff}`, {
+    const multiplier = encodeURIComponent(currentMultiplier);
+    const res = await apiPost(`/api/analyze?tariff=${tariff}&multiplier=${multiplier}`, {
       method: "POST",
       body: formData,
       signal: reqTimeout(30000),
     });
     const data = await res.json().catch(() => null);
-    if (!res.ok || !data) throw new Error(data?.detail || `Request failed (${res.status})`);
+    if (!res.ok || !data) throw new Error(data?.detail || `Ошибка запроса (${res.status})`);
     render(data);
   } catch (err) {
     showStatus(
-      `${err.message} — open the dashboard on http://127.0.0.1:8000 (not Live Server).`,
+      `${err.message} — откройте дашборд на http://127.0.0.1:8000 (не через Live Server).`,
       true,
     );
   } finally {
@@ -90,21 +93,27 @@ async function analyze(formData) {
 
 /* ---------- Rendering ---------- */
 let lastAnalysis = null; // reused for the AI Copilot and tariff re-runs
+let lastInsight = null; // last Gemini/offline recommendation, reused by the report download
 
 function render(data) {
   const { summary: s, series } = data;
 
   $("source-name").textContent =
     data.source === "sample_data.csv"
-      ? "the bundled sample month"
+      ? "образец данных за месяц"
       : data.source;
-  $("baseline-chip").textContent = `${fmt(s.baseline_kwh, 1)} kWh`;
-  $("days-analyzed").textContent = `of ${s.days_analyzed} days analyzed`;
+  $("baseline-chip").textContent = `${fmt(s.baseline_kwh, 1)} кВт·ч`;
+  $("days-analyzed").textContent = `из ${s.days_analyzed} дней проанализировано`;
+  $("multiplier-chip").textContent = fmt(s.multiplier, 1);
+  $("multiplier-value").textContent = fmt(s.multiplier, 1);
+  $("multiplier-slider").value = s.multiplier;
+  currentMultiplier = s.multiplier;
 
   $("kpi-excess").textContent = fmt(s.total_excess_kwh, 1);
   $("kpi-kzt").textContent = fmt(s.savings_kzt);
   $("kpi-co2").textContent = fmt(s.co2_saved_kg, 1);
   $("kpi-days").textContent = s.anomaly_days;
+  $("kpi-yearly").textContent = fmt(s.savings_kzt * 12);
 
   renderInsight(data);
   renderChart(series, s.baseline_kwh * s.multiplier, s.baseline_kwh);
@@ -113,24 +122,25 @@ function render(data) {
   lastAnalysis = data;
   $("results").classList.remove("hidden");
   resetCopilot();
+  showTab("overview");
 }
 
 function renderInsight({ summary, worst_day, first_anomaly, last_anomaly }) {
   const box = $("insight");
   if (!worst_day) {
     box.textContent =
-      "Good news: every closed day stayed near the off baseline — no waste detected.";
+      "Хорошие новости: в каждый нерабочий день потребление оставалось близко к базовому уровню — потерь не обнаружено.";
     box.classList.remove("hidden");
     return;
   }
   const span =
     first_anomaly === last_anomaly
-      ? `on <strong>${shortDate(first_anomaly)}</strong>`
-      : `between <strong>${shortDate(first_anomaly)} and ${shortDate(last_anomaly)}</strong>`;
+      ? `<strong>${shortDate(first_anomaly)}</strong>`
+      : `в период с <strong>${shortDate(first_anomaly)} по ${shortDate(last_anomaly)}</strong>`;
   box.innerHTML =
-    `⚠ The building was running as if occupied on <strong>${summary.anomaly_days}</strong> closed day(s) ${span}. ` +
-    `Worst offender: <strong>${shortDate(worst_day)}</strong> — that single period cost about ` +
-    `<strong>${fmt(summary.savings_kzt)} KZT</strong> in total. Check HVAC and lighting timers.`;
+    `⚠ Здание потребляло энергию так, будто было занято людьми, в <strong>${summary.anomaly_days}</strong> нерабочий(их) день(дней) ${span}. ` +
+    `Самый затратный день: <strong>${shortDate(worst_day)}</strong> — за весь период это обошлось примерно в ` +
+    `<strong>${fmt(summary.savings_kzt)} тенге</strong>. Проверьте таймеры отопления и освещения.`;
   box.classList.remove("hidden");
 }
 
@@ -145,10 +155,10 @@ function renderTable(series, s) {
       "beforeend",
       `<tr>
         <td>${d.date}</td>
-        <td class="num">${fmt(d.consumption_kwh, 1)} kWh</td>
-        <td class="num excess">+${fmt(d.excess_kwh, 1)} kWh</td>
-        <td class="num">${fmt(d.excess_kwh * s.tariff_kzt_per_kwh)} KZT</td>
-        <td class="num">${fmt(d.excess_kwh * s.co2_factor, 1)} kg</td>
+        <td class="num">${fmt(d.consumption_kwh, 1)} кВт·ч</td>
+        <td class="num excess">+${fmt(d.excess_kwh, 1)} кВт·ч</td>
+        <td class="num">${fmt(d.excess_kwh * s.tariff_kzt_per_kwh)} тенге</td>
+        <td class="num">${fmt(d.excess_kwh * s.co2_factor, 1)} кг</td>
       </tr>`,
     );
   }
@@ -199,7 +209,7 @@ function makeY(maxV) {
     grid += `<line x1="${MARGIN.left}" y1="${yy}" x2="${W - MARGIN.right}" y2="${yy}" stroke="#232a33"/>` +
       `<text x="${MARGIN.left - 10}" y="${+yy + 4}" fill="#9aa4b2" font-size="11" text-anchor="end">${fmt(v)}</text>`;
   }
-  grid += `<text x="12" y="${MARGIN.top - 6}" fill="#9aa4b2" font-size="11">kWh</text>`;
+  grid += `<text x="12" y="${MARGIN.top - 6}" fill="#9aa4b2" font-size="11">кВт·ч</text>`;
   return { maxKwh, yScale, invert, grid, innerH };
 }
 
@@ -207,10 +217,10 @@ function refLines(y, mean, showMean) {
   const tv = chartState.threshold;
   let out =
     `<line x1="${MARGIN.left}" y1="${y.yScale(tv).toFixed(1)}" x2="${W - MARGIN.right}" y2="${y.yScale(tv).toFixed(1)}" stroke="#d29922" stroke-width="2" stroke-dasharray="7 5"/>` +
-    `<text x="${W - MARGIN.right}" y="${(y.yScale(tv) - 7).toFixed(1)}" fill="#d29922" font-size="11" text-anchor="end">threshold ${fmt(tv, 1)}</text>`;
+    `<text x="${W - MARGIN.right}" y="${(y.yScale(tv) - 7).toFixed(1)}" fill="#d29922" font-size="11" text-anchor="end">порог ${fmt(tv, 1)}</text>`;
   if (showMean && mean > 0) {
     out += `<line x1="${MARGIN.left}" y1="${y.yScale(mean).toFixed(1)}" x2="${W - MARGIN.right}" y2="${y.yScale(mean).toFixed(1)}" stroke="#8b949e" stroke-width="1" stroke-dasharray="2 5"/>` +
-      `<text x="${MARGIN.left + 4}" y="${(y.yScale(mean) - 6).toFixed(1)}" fill="#8b949e" font-size="10.5">avg ${fmt(mean, 1)}</text>`;
+      `<text x="${MARGIN.left + 4}" y="${(y.yScale(mean) - 6).toFixed(1)}" fill="#8b949e" font-size="10.5">ср. ${fmt(mean, 1)}</text>`;
   }
   return out;
 }
@@ -232,13 +242,13 @@ function weeklyItems(series) {
     w.days++;
   }
   return [...map.entries()].map(([key, w]) => ({
-    label: `wk ${shortDate(key)}`,
+    label: `нед. ${shortDate(key)}`,
     total: w.work + w.base + w.waste,
     days: w.days,
     segs: [
-      { name: "Workdays", v: w.work, color: COLORS.workday },
-      { name: "Closed essential", v: w.base, color: COLORS.offday },
-      { name: "Waste", v: w.waste, color: COLORS.anomaly },
+      { name: "Рабочие дни", v: w.work, color: COLORS.workday },
+      { name: "Нерабочие (норма)", v: w.base, color: COLORS.offday },
+      { name: "Потери", v: w.waste, color: COLORS.anomaly },
     ],
   }));
 }
@@ -329,8 +339,8 @@ function drawCumulativeSvg(items, y) {
   let svg =
     `<polyline points="${pt("total")}" fill="none" stroke="#58a6ff" stroke-width="2.6" stroke-linejoin="round"/>` +
     `<polyline points="${pt("waste")}" fill="none" stroke="${COLORS.anomaly}" stroke-width="2.2" stroke-dasharray="5 4"/>` +
-    `<text x="${MARGIN.left + 6}" y="${MARGIN.top + 2}" fill="#58a6ff" font-size="11">— cumulative kWh</text>` +
-    `<text x="${MARGIN.left + 128}" y="${MARGIN.top + 2}" fill="${COLORS.anomaly}" font-size="11">-- cumulative waste</text>`;
+    `<text x="${MARGIN.left + 6}" y="${MARGIN.top + 2}" fill="#58a6ff" font-size="11">— накопительно, кВт·ч</text>` +
+    `<text x="${MARGIN.left + 168}" y="${MARGIN.top + 2}" fill="${COLORS.anomaly}" font-size="11">-- накопительные потери</text>`;
   items.forEach((d, i) => {
     svg += `<circle cx="${xCenter(i).toFixed(1)}" cy="${y.yScale(d.total).toFixed(1)}" r="2.4" fill="#58a6ff"/><circle cx="${xCenter(i).toFixed(1)}" cy="${y.yScale(d.waste).toFixed(1)}" r="2.2" fill="${COLORS.anomaly}"/>`;
   });
@@ -494,24 +504,24 @@ function drawDonut(series) {
   const total = work + base + waste;
   if (!total) return;
   const slices = [
-    { name: "Workday use", val: work, color: COLORS.workday },
-    { name: "Closed-day essential", val: base, color: COLORS.offday },
-    { name: "Wasted energy", val: waste, color: COLORS.anomaly },
+    { name: "Потребление в рабочие дни", val: work, color: COLORS.workday },
+    { name: "Норма в нерабочие дни", val: base, color: COLORS.offday },
+    { name: "Потери энергии", val: waste, color: COLORS.anomaly },
   ].filter((s) => s.val > 0);
 
   const cx = 175, cy = 172, rO = 120, rI = 76, pad = 0.012;
   let angle = -Math.PI / 2, arcs = "";
   for (const s of slices) {
     const sweep = (s.val / total) * Math.PI * 2;
-    arcs += `<path class="slice" d="${donutArc(cx, cy, rO, rI, angle + pad / 2, angle + sweep - pad / 2)}" fill="${s.color}"><title>${s.name}: ${fmt(s.val, 1)} kWh (${((s.val / total) * 100).toFixed(1)}%)</title></path>`;
+    arcs += `<path class="slice" d="${donutArc(cx, cy, rO, rI, angle + pad / 2, angle + sweep - pad / 2)}" fill="${s.color}"><title>${s.name}: ${fmt(s.val, 1)} кВт·ч (${((s.val / total) * 100).toFixed(1)}%)</title></path>`;
     angle += sweep;
   }
   const center =
     `<text x="${cx}" y="${cy - 8}" text-anchor="middle" fill="#e6edf3" font-size="24" font-weight="700">${fmt(total)}</text>` +
-    `<text x="${cx}" y="${cy + 12}" text-anchor="middle" fill="#9aa4b2" font-size="11">kWh total · ${series.length} days</text>` +
-    `<text x="${cx}" y="${cy + 30}" text-anchor="middle" fill="${COLORS.anomaly}" font-size="11.5" font-weight="600">${((waste / total) * 100).toFixed(1)}% was waste</text>`;
+    `<text x="${cx}" y="${cy + 12}" text-anchor="middle" fill="#9aa4b2" font-size="11">кВт·ч всего · ${series.length} дн.</text>` +
+    `<text x="${cx}" y="${cy + 30}" text-anchor="middle" fill="${COLORS.anomaly}" font-size="11.5" font-weight="600">${((waste / total) * 100).toFixed(1)}% — потери</text>`;
   const rows = slices.map((s) =>
-    `<div class="row${s.color === COLORS.anomaly ? " waste" : ""}"><span class="swatch" style="background:${s.color}"></span><span class="name">${s.name}</span><span class="val">${fmt(s.val, 1)} kWh</span><span class="pct">${((s.val / total) * 100).toFixed(1)}%</span></div>`).join("");
+    `<div class="row${s.color === COLORS.anomaly ? " waste" : ""}"><span class="swatch" style="background:${s.color}"></span><span class="name">${s.name}</span><span class="val">${fmt(s.val, 1)} кВт·ч</span><span class="pct">${((s.val / total) * 100).toFixed(1)}%</span></div>`).join("");
   $("chart").innerHTML =
     `<div class="donut-wrap fade-in"><svg viewBox="0 0 350 344" style="width:350px" role="img">${arcs}${center}</svg><div class="dlegend">${rows}</div></div>`;
 }
@@ -553,15 +563,15 @@ function drawChart() {
     describe = (i) => {
       const w = items[i];
       const segRows = w.segs.filter((s) => s.v > 0)
-        .map((s) => `<div class="ci-row"><i class="dot" style="background:${s.color};display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px"></i>${s.name}: <b>${fmt(s.v, 1)}</b> kWh</div>`).join("");
-      return `<div class="ci-date">${w.label}</div><div class="ci-row">total <b>${fmt(w.total, 1)} kWh</b> · ${w.days} days</div>${segRows}`;
+        .map((s) => `<div class="ci-row"><i class="dot" style="background:${s.color};display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px"></i>${s.name}: <b>${fmt(s.v, 1)}</b> кВт·ч</div>`).join("");
+      return `<div class="ci-date">${w.label}</div><div class="ci-row">всего <b>${fmt(w.total, 1)} кВт·ч</b> · ${w.days} дн.</div>${segRows}`;
     };
   } else if (view === "cumulative") {
     maxV = Math.max(...items.map((d) => d.total));
     builder = drawCumulativeSvg;
     describe = (i) => {
       const d = items[i];
-      return `<div class="ci-date">${d.label}</div><div class="ci-row">total: <b>${fmt(d.total, 1)} kWh</b></div><div class="ci-warn">wasted so far: ${fmt(d.waste, 1)} kWh</div>`;
+      return `<div class="ci-date">${d.label}</div><div class="ci-row">всего: <b>${fmt(d.total, 1)} кВт·ч</b></div><div class="ci-warn">потери на этот момент: ${fmt(d.waste, 1)} кВт·ч</div>`;
     };
   } else {
     maxV = Math.max(...items.map((d) => d.kwh), chartState.threshold);
@@ -570,7 +580,7 @@ function drawChart() {
     builder = view === "line" ? drawLineSvg : drawBarsSvg;
     describe = (i) => {
       const d = items[i];
-      return `<div class="ci-date">${d.label}${d.closed ? " · closed day" : " · workday"}</div><div class="ci-row"><b>${fmt(d.kwh, 1)} kWh</b>${mean ? ` · avg ${fmt(mean, 1)}` : ""}</div>${d.excess > 0 ? `<div class="ci-warn">⚠ +${fmt(d.excess, 1)} kWh above baseline</div>` : ""}`;
+      return `<div class="ci-date">${d.label}${d.closed ? " · нерабочий день" : " · рабочий день"}</div><div class="ci-row"><b>${fmt(d.kwh, 1)} кВт·ч</b>${mean ? ` · ср. ${fmt(mean, 1)}` : ""}</div>${d.excess > 0 ? `<div class="ci-warn">⚠ +${fmt(d.excess, 1)} кВт·ч сверх базового уровня</div>` : ""}`;
     };
   }
 
@@ -589,6 +599,7 @@ function resetCopilot() {
   $("insight-text").classList.add("hidden");
   $("insight-text").innerHTML = "";
   $("insight-loading").classList.add("hidden");
+  lastInsight = null;
 }
 
 // Minimal safe Markdown renderer (headings, bullets, bold, code) — input is
@@ -639,12 +650,13 @@ $("insight-btn").addEventListener("click", async () => {
       signal: reqTimeout(150000),
     });
     const data = await res.json().catch(() => null);
-    if (!res.ok || !data) throw new Error(data?.detail || `Request failed (${res.status})`);
+    if (!res.ok || !data) throw new Error(data?.detail || `Ошибка запроса (${res.status})`);
     const box = $("insight-text");
     box.innerHTML = mdToHtml(data.insight);
     box.classList.remove("hidden");
+    lastInsight = data;
   } catch (err) {
-    showStatus(`Copilot unavailable — ${err.message}`, true);
+    showStatus(`Копилот недоступен — ${err.message}`, true);
     setTimeout(hideStatus, 6000);
   } finally {
     $("insight-loading").classList.add("hidden");
@@ -684,6 +696,107 @@ $("tariff").addEventListener("input", () => {
     // For uploads we keep the previous result until a new file is chosen,
     // because browsers cannot re-read a File input after it is cleared.
   }, 450);
+});
+
+/* ---------- Tabs ---------- */
+function showTab(name) {
+  document.querySelectorAll(".tab-panel").forEach((panel) => {
+    panel.classList.toggle("hidden", panel.id !== `tab-${name}`);
+  });
+  document.querySelectorAll(".tab-btn").forEach((btn) => {
+    const active = btn.dataset.tab === name;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  });
+}
+
+document.querySelectorAll(".tab-btn").forEach((btn) =>
+  btn.addEventListener("click", () => showTab(btn.dataset.tab)),
+);
+
+/* ---------- Anomaly threshold slider (item 5) ----------
+   Re-runs the existing /api/analyze with a different multiplier — no
+   detection logic is duplicated on the client. */
+let multiplierDebounce;
+$("multiplier-slider").addEventListener("input", () => {
+  const value = Number($("multiplier-slider").value).toFixed(1);
+  $("multiplier-value").textContent = value;
+  clearTimeout(multiplierDebounce);
+  multiplierDebounce = setTimeout(() => {
+    currentMultiplier = value;
+    // Same limitation as the tariff input: an uploaded File input can't be
+    // re-read once cleared, so only the bundled sample recalculates live.
+    if (lastAnalysis && lastAnalysis.source === "sample_data.csv") analyze(new FormData());
+  }, 300);
+});
+
+/* ---------- "Скачать отчёт" — printable HTML report ---------- */
+function buildReportHtml() {
+  if (!lastAnalysis) return "";
+  const { summary: s, series, source } = lastAnalysis;
+  const anomalies = series.filter((d) => d.is_anomaly).sort((a, b) => b.excess_kwh - a.excess_kwh);
+  const generated = new Date().toLocaleString("ru-RU");
+  const tariffNote = s.baseline_reliable
+    ? "подтверждённый (данных по нерабочим дням достаточно)"
+    : "демо (нерабочих дней в выборке пока мало — предварительный сигнал, не подтверждённый факт)";
+  const rows = anomalies
+    .map(
+      (d) =>
+        `<tr><td>${d.date}</td><td>${fmt(d.consumption_kwh, 1)} кВт·ч</td>` +
+        `<td>+${fmt(d.excess_kwh, 1)} кВт·ч</td>` +
+        `<td>${fmt(d.excess_kwh * s.tariff_kzt_per_kwh)} тенге</td></tr>`,
+    )
+    .join("");
+  const insightBlock = lastInsight
+    ? `<h2>Рекомендация ИИ</h2>
+       <p class="muted">Источник: ${lastInsight.model === "offline-fallback" ? "офлайн-шаблон (Gemini был недоступен)" : `Gemini (${lastInsight.model})`}</p>
+       <div>${mdToHtml(lastInsight.insight)}</div>`
+    : "";
+  return `<!doctype html>
+<html lang="ru"><head><meta charset="utf-8" />
+<title>Отчёт EcoBiz Copilot — ${source}</title>
+<style>
+  body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #111; padding: 24px; max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 20px; } h2 { font-size: 15px; margin-top: 22px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { border-bottom: 1px solid #ccc; padding: 5px 8px; text-align: left; font-size: 12.5px; }
+  .muted { color: #555; font-size: 12px; }
+  .summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 20px; margin: 10px 0; }
+  @media print { body { padding: 0; } }
+</style></head>
+<body>
+  <h1>EcoBiz Copilot — отчёт по потерям энергии</h1>
+  <p class="muted">Сгенерировано: ${generated} · Источник данных: ${source}</p>
+  <p class="muted">Тариф: ${s.tariff_kzt_per_kwh} тенге/кВт·ч (${tariffNote})</p>
+  <h2>Сводные цифры</h2>
+  <div class="summary">
+    <div>Потери энергии: <strong>${fmt(s.total_excess_kwh, 1)} кВт·ч</strong></div>
+    <div>Потери в тенге: <strong>${fmt(s.savings_kzt)} тенге</strong></div>
+    <div>Экономия CO₂: <strong>${fmt(s.co2_saved_kg, 1)} кг</strong></div>
+    <div>Аномальных дней: <strong>${s.anomaly_days} из ${s.days_analyzed}</strong></div>
+    <div>Прогноз экономии за год: <strong>${fmt(s.savings_kzt * 12)} тенге</strong> (проекция, не гарантия)</div>
+    <div>Базовый уровень: <strong>${fmt(s.baseline_kwh, 1)} кВт·ч</strong> (порог ×${fmt(s.multiplier, 1)})</div>
+  </div>
+  <h2>Аномальные даты</h2>
+  <table><thead><tr><th>Дата</th><th>Потребление</th><th>Превышение</th><th>Потери</th></tr></thead>
+  <tbody>${rows || '<tr><td colspan="4">Аномалий не обнаружено</td></tr>'}</tbody></table>
+  ${insightBlock}
+</body></html>`;
+}
+
+$("download-btn").addEventListener("click", () => {
+  const html = buildReportHtml();
+  if (!html) return;
+  const win = window.open("", "_blank");
+  if (!win) {
+    showStatus("Не удалось открыть окно отчёта — разрешите всплывающие окна для этого сайта.", true);
+    setTimeout(hideStatus, 6000);
+    return;
+  }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  win.print();
 });
 
 // Load something immediately so the screen is never empty.

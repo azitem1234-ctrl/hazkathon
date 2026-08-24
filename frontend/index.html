@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0d1117" />
-  <title>EcoBiz Copilot — Energy Waste Detector</title>
+  <title>EcoBiz Copilot — детектор потерь энергии</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>" />
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -14,18 +14,18 @@
       <span class="logo" aria-hidden="true">🌿</span>
       <div>
         <h1>EcoBiz Copilot</h1>
-        <p>Detects electricity waste on days your building should be closed</p>
+        <p>Находит потери электроэнергии в дни, когда здание должно быть закрыто</p>
       </div>
     </div>
     <div class="controls">
       <label class="field" for="tariff">
-        <span>Tariff</span>
+        <span>Тариф</span>
         <input id="tariff" type="number" step="0.001" min="0" value="17.447" />
-        <span class="unit">KZT/kWh</span>
+        <span class="unit">тенге/кВт·ч</span>
       </label>
-      <button id="sample-btn" class="btn ghost" type="button">Load sample</button>
+      <button id="sample-btn" class="btn ghost" type="button">Загрузить пример</button>
       <button id="upload-btn" class="btn primary" type="button">
-        Upload CSV / Excel
+        Загрузить CSV / Excel
         <input id="file-input" type="file" accept=".csv,.xlsx,.xls" hidden />
       </button>
     </div>
@@ -35,100 +35,154 @@
     <section id="status" class="status hidden" role="alert"></section>
 
     <section id="loading" class="loading hidden" aria-live="polite">
-      <span class="spinner" aria-hidden="true"></span> Crunching your energy data…
+      <span class="spinner" aria-hidden="true"></span> Анализируем данные по энергопотреблению…
     </section>
 
-    <noscript><p class="status error">JavaScript is required to use this dashboard.</p></noscript>
+    <noscript><p class="status error">Для работы дашборда необходим JavaScript.</p></noscript>
 
     <section id="results" class="hidden">
-      <p class="source-line">
-        Analyzing <strong id="source-name"></strong> · baseline
-        <strong id="baseline-chip" class="chip"></strong>
-        <span class="muted">(25th pct of closed-day usage × 1.5)</span>
-      </p>
+      <nav class="tabs" role="tablist" aria-label="Разделы дашборда">
+        <button class="tab-btn active" data-tab="overview" type="button" role="tab" aria-selected="true">Обзор</button>
+        <button class="tab-btn" data-tab="ai" type="button" role="tab" aria-selected="false">AI-рекомендации</button>
+        <button class="tab-btn" data-tab="data" type="button" role="tab" aria-selected="false">Данные по дням</button>
+        <button class="tab-btn" data-tab="method" type="button" role="tab" aria-selected="false">О методе</button>
+      </nav>
 
-      <section id="insight" class="insight hidden"></section>
-
-      <section class="kpis">
-        <article class="kpi red">
-          <span class="kpi-label">Wasted energy</span>
-          <span class="kpi-value" id="kpi-excess">—</span>
-          <span class="kpi-unit">kWh above baseline</span>
-        </article>
-        <article class="kpi amber">
-          <span class="kpi-label">Money lost</span>
-          <span class="kpi-value" id="kpi-kzt">—</span>
-          <span class="kpi-unit">KZT recoverable</span>
-        </article>
-        <article class="kpi green">
-          <span class="kpi-label">CO₂ avoidable</span>
-          <span class="kpi-value" id="kpi-co2">—</span>
-          <span class="kpi-unit">kg emissions</span>
-        </article>
-        <article class="kpi blue">
-          <span class="kpi-label">Flagged days</span>
-          <span class="kpi-value" id="kpi-days">—</span>
-          <span class="kpi-unit" id="days-analyzed">of — days analyzed</span>
-        </article>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <h2>Daily consumption</h2>
-          <div class="seg" role="tablist" aria-label="Chart type">
-            <button class="seg-btn active" data-view="bar" type="button">Bars</button>
-            <button class="seg-btn" data-view="line" type="button">Line</button>
-            <button class="seg-btn" data-view="weekly" type="button">Weekly</button>
-            <button class="seg-btn" data-view="cumulative" type="button">Cumulative</button>
-            <button class="seg-btn" data-view="donut" type="button">Donut</button>
-          </div>
-        </div>
-        <div class="chart-sub">
-          <div class="legend">
-            <span><i class="dot workday"></i>Workday</span>
-            <span><i class="dot offday"></i>Closed</span>
-            <span><i class="dot anomaly"></i>Anomaly</span>
-            <span><i class="line"></i>Threshold</span>
-          </div>
-          <div class="hint muted">wheel = zoom · drag = pan · shift+drag = select range · double-click = reset</div>
-        </div>
-        <div id="chart-wrap">
-          <div id="chart-info" class="chart-info hidden"></div>
-          <button id="zoom-reset" class="btn ghost hidden" type="button">↺ Reset zoom</button>
-          <div id="chart"></div>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <h2>AI Copilot</h2>
-          <button id="insight-btn" class="btn primary" type="button">✨ Get action plan</button>
-        </div>
-        <div id="insight-loading" class="loading hidden">
-          <span class="spinner" aria-hidden="true"></span> Copilot is thinking…
-        </div>
-        <p id="insight-text" class="insight-text hidden"></p>
-      </section>
-
-      <section class="card">
-        <div class="card-head"><h2>Waste report</h2></div>
-        <div class="table-wrap">
-          <table id="anomaly-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th class="num">Consumption</th>
-                <th class="num">Excess</th>
-                <th class="num">Cost lost</th>
-                <th class="num">CO₂</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <p id="no-anomalies" class="empty hidden">
-          No anomalies detected — this building switches off properly on closed days. 🎉
+      <section id="tab-overview" class="tab-panel" role="tabpanel">
+        <p class="source-line">
+          Анализируем <strong id="source-name"></strong> · базовый уровень
+          <strong id="baseline-chip" class="chip"></strong>
+          <span class="muted">(25-й перцентиль потребления в нерабочие дни × <span id="multiplier-chip">1.5</span>)</span>
         </p>
+
+        <section id="insight" class="insight hidden"></section>
+
+        <section class="kpis">
+          <article class="kpi red">
+            <span class="kpi-label">Потери энергии</span>
+            <span class="kpi-value" id="kpi-excess">—</span>
+            <span class="kpi-unit">кВт·ч сверх базового уровня</span>
+          </article>
+          <article class="kpi amber">
+            <span class="kpi-label">Потери в тенге</span>
+            <span class="kpi-value" id="kpi-kzt">—</span>
+            <span class="kpi-unit">тенге можно вернуть</span>
+          </article>
+          <article class="kpi green">
+            <span class="kpi-label">Экономия CO₂</span>
+            <span class="kpi-value" id="kpi-co2">—</span>
+            <span class="kpi-unit">кг выбросов</span>
+          </article>
+          <article class="kpi blue">
+            <span class="kpi-label">Аномальных дней</span>
+            <span class="kpi-value" id="kpi-days">—</span>
+            <span class="kpi-unit" id="days-analyzed">из — дней проанализировано</span>
+          </article>
+          <article class="kpi purple">
+            <span class="kpi-label">Прогноз экономии за год</span>
+            <span class="kpi-value" id="kpi-yearly">—</span>
+            <span class="kpi-unit">тенге в год</span>
+            <span class="kpi-note">проекция при аналогичной динамике потребления, не гарантированный результат</span>
+          </article>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>Дневное потребление</h2>
+            <div class="seg" role="tablist" aria-label="Тип графика">
+              <button class="seg-btn active" data-view="bar" type="button">Столбцы</button>
+              <button class="seg-btn" data-view="line" type="button">Линия</button>
+              <button class="seg-btn" data-view="weekly" type="button">По неделям</button>
+              <button class="seg-btn" data-view="cumulative" type="button">Накопительно</button>
+              <button class="seg-btn" data-view="donut" type="button">Кольцевая</button>
+            </div>
+          </div>
+          <div class="chart-sub">
+            <div class="legend">
+              <span><i class="dot workday"></i>Рабочий день</span>
+              <span><i class="dot offday"></i>Нерабочий день</span>
+              <span><i class="dot anomaly"></i>Аномалия</span>
+              <span><i class="line"></i>Порог</span>
+            </div>
+            <div class="hint muted">колесо = масштаб · перетаскивание = сдвиг · shift+перетаскивание = выбор диапазона · двойной клик = сброс</div>
+          </div>
+          <div id="chart-wrap">
+            <div id="chart-info" class="chart-info hidden"></div>
+            <button id="zoom-reset" class="btn ghost hidden" type="button">↺ Сбросить масштаб</button>
+            <div id="chart"></div>
+          </div>
+        </section>
+      </section>
+
+      <section id="tab-ai" class="tab-panel hidden" role="tabpanel">
+        <section class="card">
+          <div class="card-head">
+            <h2>AI Copilot</h2>
+            <button id="insight-btn" class="btn primary" type="button">✨ Получить план действий</button>
+          </div>
+          <div id="insight-loading" class="loading hidden">
+            <span class="spinner" aria-hidden="true"></span> Копилот думает…
+          </div>
+          <p id="insight-text" class="insight-text hidden"></p>
+        </section>
+      </section>
+
+      <section id="tab-data" class="tab-panel hidden" role="tabpanel">
+        <section class="card">
+          <div class="card-head">
+            <h2>Отчёт по потерям</h2>
+            <button id="download-btn" class="btn ghost" type="button">⬇ Скачать отчёт</button>
+          </div>
+          <div class="table-wrap">
+            <table id="anomaly-table">
+              <thead>
+                <tr>
+                  <th>Дата</th>
+                  <th class="num">Потребление</th>
+                  <th class="num">Превышение</th>
+                  <th class="num">Потери</th>
+                  <th class="num">CO₂</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p id="no-anomalies" class="empty hidden">
+            Аномалий не обнаружено — здание корректно отключается в нерабочие дни. 🎉
+          </p>
+        </section>
+      </section>
+
+      <section id="tab-method" class="tab-panel hidden" role="tabpanel">
+        <section class="card">
+          <div class="card-head"><h2>Как работает детекция</h2></div>
+          <div class="method-text">
+            <ol>
+              <li>Берём только нерабочие дни — из файла (колонка <code>is_workday</code>) или
+                автоматически по календарю выходных и праздников Казахстана.</li>
+              <li>Базовый уровень = 25-й перцентиль их потребления — устойчив к тем самым выбросам,
+                которые мы пытаемся найти, в отличие от обычного среднего.</li>
+              <li>День считается аномалией, если потребление превышает базовый уровень, умноженный
+                на порог (по умолчанию ×1.5).</li>
+              <li>Превышение в аномальный день = фактическое потребление − базовый уровень.</li>
+              <li>Экономия в тенге = превышение × тариф; экономия CO₂ = превышение × коэффициент CO₂.</li>
+            </ol>
+            <p class="muted">
+              Это статистическое обнаружение аномалий во временном ряде, а не нейросеть — осознанный
+              выбор для MVP: метод честный, объяснимый на защите и достаточный для такого объёма данных.
+              Gemini решает другую, отдельную задачу: превращает уже проверенные цифры в план действий
+              для менеджера — каждое число и дата в рекомендации берутся из расчёта, модель их не придумывает.
+            </p>
+          </div>
+          <div class="threshold-slider">
+            <label for="multiplier-slider">
+              Порог аномалии: базовый уровень × <span id="multiplier-value">1.5</span>
+            </label>
+            <input id="multiplier-slider" type="range" min="1.2" max="2.0" step="0.1" value="1.5" />
+            <p class="muted">Подвиньте ползунок, чтобы пересчитать график и карточки с другим порогом
+              чувствительности — без изменения самого метода детекции.</p>
+          </div>
+        </section>
       </section>
     </section>
   </main>

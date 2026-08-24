@@ -57,14 +57,16 @@ def get_baseline(df: pd.DataFrame) -> float:
     return float(off_days.quantile(0.25))
 
 
-def detect_anomalies(df: pd.DataFrame) -> pd.DataFrame:
+def detect_anomalies(df: pd.DataFrame, multiplier: float = BASELINE_MULTIPLIER) -> pd.DataFrame:
     """Flag non-working days whose consumption exceeds the closed-building baseline.
 
     Baseline = 25th percentile of non-working-day consumption, i.e. a day
     where everything was properly switched off. A robust statistic is used
     so the baseline is not inflated by the very waste we are detecting.
     A day is an anomaly when is_workday == 0 and
-    consumption_kwh > baseline * BASELINE_MULTIPLIER.
+    consumption_kwh > baseline * multiplier (defaults to BASELINE_MULTIPLIER;
+    exposed as a parameter so the UI's threshold slider can explore other
+    values without duplicating this logic).
     Adds boolean `is_anomaly` and `excess_kwh` (kWh above baseline, else 0).
 
     `df.attrs["baseline_reliable"]` is False when fewer than
@@ -77,7 +79,7 @@ def detect_anomalies(df: pd.DataFrame) -> pd.DataFrame:
     baseline = get_baseline(df)
 
     over_baseline = (df["is_workday"] == 0) & (
-        df["consumption_kwh"] > baseline * BASELINE_MULTIPLIER
+        df["consumption_kwh"] > baseline * multiplier
     )
     df["is_anomaly"] = over_baseline
     df["excess_kwh"] = (df["consumption_kwh"] - baseline).where(over_baseline, 0.0)

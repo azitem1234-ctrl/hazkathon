@@ -41,6 +41,8 @@ scripts/run.sh        # venv + uvicorn launcher
 
 ## Quick start
 
+**Live demo:** https://hazkathon.onrender.com
+
 Needs Python 3.10+.
 
 ```bash
@@ -121,6 +123,25 @@ with sources; confirm the actual contracted tariff before presenting final
 numbers, and pass it via the `tariff` parameter. The default CO2 factor
 (0.85 kg/kWh) is likewise a demonstration assumption pending a confirmed
 methodology — see `config.CO2_FACTOR_TODO`.
+
+## Deploy
+
+The repo includes `render.yaml` so [Render](https://render.com) can deploy the whole app (backend +
+static frontend, no database) as a single free-tier Python web service:
+
+1. Push this repo to GitHub (already done: `azitem1234-ctrl/hazkathon`).
+2. On Render: **New → Blueprint**, connect the repo — it reads `render.yaml` automatically
+   (build: `pip install -r requirements.txt`, start: `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`).
+3. In the service's **Environment** tab, set `GEMINI_API_KEY` to your key (it is declared in
+   `render.yaml` as a secret with no value, so Render will prompt for it — never commit the key itself).
+4. Deploy. Once live, confirm `/api/health`, `/api/analyze`, `/api/insight` and the dashboard at `/`
+   all work on the public `*.onrender.com` URL exactly like they do locally — `/api/insight` should
+   still return the offline-fallback recommendation if the key or network is ever unavailable on the
+   host, so a live demo never hard-fails.
+5. Paste the resulting URL into the **Live demo** line under [Quick start](#quick-start).
+
+Railway works the same way (Python service, same build/start commands, same env var) if preferred over
+Render — there's no Render-specific code, just the blueprint file.
 
 ## Gemini setup
 

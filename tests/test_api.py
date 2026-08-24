@@ -66,16 +66,28 @@ def test_tariff_changes_money_but_not_kwh(client):
     assert high["summary"]["anomaly_days"] == low["summary"]["anomaly_days"]
 
 
+def test_multiplier_changes_anomaly_count(client):
+    loose = client.post("/api/analyze", params={"multiplier": 1.2}).json()
+    default = client.post("/api/analyze", params={"multiplier": 1.5}).json()
+    assert loose["summary"]["multiplier"] == 1.2
+    assert default["summary"]["multiplier"] == 1.5
+    assert loose["summary"]["anomaly_days"] >= default["summary"]["anomaly_days"]
+
+
+def test_zero_multiplier_rejected(client):
+    assert client.post("/api/analyze", params={"multiplier": 0}).status_code == 422
+
+
 def test_missing_columns_returns_422(client):
     res = _post_csv(client, "a,b,c\n1,2,3\n")
     assert res.status_code == 422
-    assert "Missing required columns" in res.json()["detail"]
+    assert "Отсутствуют обязательные колонки" in res.json()["detail"]
 
 
 def test_bad_values_return_422(client):
     res = _post_csv(client, "date,consumption_kwh,is_workday\nnope,not-a-number,1\n")
     assert res.status_code == 422
-    assert "Invalid values" in res.json()["detail"]
+    assert "Некорректные значения" in res.json()["detail"]
 
 
 def test_empty_rows_return_422(client):

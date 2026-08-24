@@ -9,6 +9,7 @@
   --red: #f85149;
   --amber: #d29922;
   --blue: #58a6ff;
+  --purple: #a371f7;
   --radius: 12px;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
@@ -180,6 +181,8 @@ main { max-width: 1080px; margin: 0 auto; padding: 26px 24px 64px; }
 .kpi.amber .kpi-value { color: var(--amber); }
 .kpi.green .kpi-value { color: var(--accent); }
 .kpi.blue .kpi-value { color: var(--blue); }
+.kpi.purple .kpi-value { color: var(--purple); }
+.kpi-note { font-size: 11px; color: var(--muted); font-style: italic; line-height: 1.35; margin-top: 2px; }
 
 /* ---------- Cards ---------- */
 .card {
@@ -257,6 +260,49 @@ main { max-width: 1080px; margin: 0 auto; padding: 26px 24px 64px; }
   font-size: 12px;
 }
 #chart.still .bar { animation: none; }
+
+/* ---------- Tabs ---------- */
+.tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+  -webkit-overflow-scrolling: touch;
+}
+.tab-btn {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 650;
+  padding: 11px 16px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+
+.method-text ol { padding-left: 22px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.method-text p { margin-top: 10px; }
+
+.threshold-slider {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.threshold-slider label { font-size: 13.5px; font-weight: 600; }
+.threshold-slider input[type="range"] {
+  width: 100%;
+  margin: 12px 0 8px;
+  accent-color: var(--accent);
+}
 
 /* ---------- Chart toolbar ---------- */
 .seg {
@@ -390,4 +436,14 @@ td.excess { color: var(--red); font-weight: 650; }
   main { padding: 20px 14px 48px; }
   .brand p { display: none; }
   .kpi-value { font-size: 24px; }
+  .card { padding: 16px 14px; }
+  .tab-btn { padding: 10px 12px; font-size: 12.5px; }
+}
+
+@media (max-width: 460px) {
+  .kpis { grid-template-columns: 1fr; }
+  .controls { width: 100%; }
+  .controls .btn { flex: 1 1 auto; }
+  .field { flex: 1 1 100%; }
+  th, td { padding: 8px 8px; font-size: 12.5px; }
 }
