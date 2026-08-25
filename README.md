@@ -1,49 +1,52 @@
 # EcoBiz Copilot
 
-Working MVP for the **EcoFin** track of Future Minds Hackathon 2026. The service
-analyzes a school's or small business's daily electricity consumption, finds
-where the building was still burning energy during closed periods, and turns
-that into a concrete KZT and CO2 savings figure plus a plain-language
-recommendation.
+Рабочий MVP для трека **EcoFin** хакатона Future Minds Hackathon 2026. Сервис
+анализирует ежедневное потребление электроэнергии школой или малым бизнесом,
+находит периоды, когда здание продолжало расходовать энергию во время
+простоя, и переводит это в конкретную цифру экономии в тенге и CO₂ плюс
+рекомендацию на понятном языке.
 
-## What the MVP does
+## Что делает MVP
 
-- accepts a CSV/XLSX with `date` and `consumption_kwh` (optionally `is_workday`);
-- if `is_workday` is missing, derives it from weekends plus Kazakhstan public
-  holidays and school breaks (`holidays_kz.json`) — a school-supplied schedule
-  is always trusted over the calendar guess;
-- finds anomalies via the lower quartile of non-working-day consumption;
-- reports the excess kWh, potential savings in KZT, and CO2 avoided;
-- flags when the baseline itself is too thin to trust (`baseline_reliable`);
-- calls Gemini for a human-readable action plan, but always keeps working
-  without a key or internet via a local fallback recommendation;
-- serves an interactive dashboard (charts, anomaly table, AI Copilot panel)
-  directly from the FastAPI backend.
+- принимает CSV/XLSX с колонками `date` и `consumption_kwh` (опционально
+  `is_workday`);
+- если колонки `is_workday` нет, определяет её сама по выходным дням плюс
+  государственным праздникам и школьным каникулам Казахстана
+  (`holidays_kz.json`) — расписание, предоставленное школой, всегда имеет
+  приоритет над автоматическим определением по календарю;
+- находит аномалии через нижний квартиль потребления в нерабочие дни;
+- показывает избыточные кВт·ч, потенциальную экономию в тенге и
+  предотвращённые выбросы CO₂;
+- явно отмечает, когда сама база слишком мала, чтобы ей доверять
+  (`baseline_reliable`);
+- обращается к Gemini за планом действий на понятном языке, но всегда
+  продолжает работать без ключа или интернета благодаря локальному
+  запасному варианту рекомендации;
+- показывает интерактивный дашборд (графики, таблица аномалий, панель
+  AI Copilot) прямо из FastAPI-бэкенда.
 
-## Project structure
+## Структура проекта
 
 ```text
 backend/
-  main.py            # FastAPI app: /api/analyze, /api/insight, /api/health
-  ai.py               # Gemini client (raises AIUnavailable on no key/network/error)
-  schemas.py          # Pydantic request/response contract
-core.py               # load/clean data, anomaly detection, impact calculation
-calendar_utils.py     # weekend + holiday/school-break -> is_workday
-holidays_kz.json      # sourced KZ public-holiday and school-break calendar
-config.py             # tariff/CO2 sourcing notes the team must double-check
-frontend/              # static dashboard (vanilla HTML/CSS/JS, no build step)
+  main.py            # FastAPI-приложение: /api/analyze, /api/insight, /api/health
+  ai.py               # клиент Gemini (выбрасывает AIUnavailable без ключа/сети/при ошибке)
+  schemas.py          # контракт запросов/ответов на Pydantic
+core.py               # загрузка/очистка данных, детекция аномалий, расчёт экономии
+calendar_utils.py     # выходные + праздники/каникулы -> is_workday
+holidays_kz.json      # календарь государственных праздников и каникул РК
+config.py             # заметки по источникам тарифа/CO2, которые команда должна перепроверить
+frontend/              # статический дашборд (обычные HTML/CSS/JS, без сборки)
 data/
-  sample_data.csv     # bundled demo dataset (December, with a break-week anomaly)
-  generate_sample.py  # regenerates the demo dataset
-tests/                # pytest suite (core logic, calendar, API contract)
-scripts/run.sh        # venv + uvicorn launcher
+  sample_data.csv     # встроенный демо-датасет (декабрь, с аномалией на неделе каникул)
+  generate_sample.py  # пересоздаёт демо-датасет
+tests/                # набор тестов pytest (основная логика, календарь, контракт API)
+scripts/run.sh        # запуск venv + uvicorn
 ```
 
-## Quick start
+## Быстрый старт
 
-**Live demo:** https://hazkathon.onrender.com
-
-Needs Python 3.10+.
+Нужен Python 3.10+.
 
 ```bash
 python -m venv .venv
@@ -52,9 +55,9 @@ pip install -r requirements.txt
 uvicorn backend.main:app --reload
 ```
 
-Open `http://127.0.0.1:8000` for the dashboard, or `http://127.0.0.1:8000/docs`
-for the interactive FastAPI docs (useful for a code-free demo of `/api/analyze`
-with `data/sample_data.csv`).
+Открой `http://127.0.0.1:8000` для дашборда, либо `http://127.0.0.1:8000/docs`
+для интерактивной документации FastAPI (удобно для демонстрации `/api/analyze`
+без кода, на файле `data/sample_data.csv`).
 
 ```bash
 curl http://127.0.0.1:8000/api/health
@@ -62,20 +65,22 @@ curl http://127.0.0.1:8000/api/health
 
 ## API
 
-**`POST /api/analyze`** — `multipart/form-data`, `file` optional (falls back to
-the bundled sample), `tariff` optional query param (KZT/kWh). Returns a
-`summary` (excess kWh, savings, CO2, `baseline_reliable`, `off_day_samples`)
-and the full daily `series`.
+**`POST /api/analyze`** — `multipart/form-data`, `file` опционален (при
+отсутствии используется встроенный демо-датасет), `tariff` — опциональный
+query-параметр (тенге/кВт·ч). Возвращает `summary` (избыточные кВт·ч,
+экономия, CO₂, `baseline_reliable`, `off_day_samples`) и полный дневной
+`series`.
 
-**`POST /api/insight`** — takes the `summary`/`series` from `/api/analyze` and
-returns a Markdown action plan. Uses Gemini when `GEMINI_API_KEY` is set and
-reachable; otherwise returns a locally generated recommendation built from the
-same verified numbers (`model: "offline-fallback"` in the response) so a demo
-never breaks over Wi-Fi.
+**`POST /api/insight`** — принимает `summary`/`series` из `/api/analyze` и
+возвращает план действий в формате Markdown. Использует Gemini, если задан и
+доступен `GEMINI_API_KEY`; в противном случае возвращает локально
+сгенерированную рекомендацию на основе тех же проверенных цифр (`model:
+"offline-fallback"` в ответе), чтобы демонстрация никогда не зависела от
+Wi-Fi.
 
-**`GET /api/health`** — liveness check.
+**`GET /api/health`** — проверка работоспособности.
 
-### Minimal input format
+### Минимальный формат входных данных
 
 ```csv
 date,consumption_kwh
@@ -83,7 +88,7 @@ date,consumption_kwh
 2026-03-20,410.2
 ```
 
-### With an exact school schedule
+### С точным расписанием школы
 
 ```csv
 date,consumption_kwh,is_workday
@@ -91,111 +96,99 @@ date,consumption_kwh,is_workday
 2026-03-20,410.2,0
 ```
 
-`is_workday=1` is a normal working day, `0` is non-working. If a row is
-missing, invalid, or has a negative `consumption_kwh`, `/api/analyze` returns
-a `422` with a specific message instead of silently skewing the result.
+`is_workday=1` — обычный рабочий день, `0` — нерабочий. Если строка
+пропущена, некорректна или содержит отрицательное `consumption_kwh`,
+`/api/analyze` вернёт `422` с конкретным сообщением вместо того, чтобы
+незаметно исказить результат.
 
-## How the detection works
+## Как работает детекция
 
-1. Take only non-working days (from the file, or auto-derived via the KZ calendar).
-2. Baseline = 25th percentile of their consumption — robust to the very waste
-   we're trying to detect, unlike a plain average.
-3. A day is an anomaly when `consumption_kwh > baseline x 1.5`.
-4. Excess on an anomaly day: `actual - baseline`.
-5. Savings: `excess x tariff`; CO2 avoided: `excess x co2_factor`.
+1. Берутся только нерабочие дни (из файла либо автоматически определённые по
+   календарю РК).
+2. Базовый уровень = 25-й перцентиль их потребления — устойчив к тем самым
+   выбросам, которые мы пытаемся найти, в отличие от обычного среднего.
+3. День считается аномалией, если `consumption_kwh > базовый уровень x 1.5`.
+4. Превышение в аномальный день: `фактическое значение - базовый уровень`.
+5. Экономия: `превышение x тариф`; предотвращённый CO₂: `превышение x
+   коэффициент CO2`.
 
-This is statistical anomaly detection over a time series, not a neural model —
-a deliberate MVP choice: it's honest, explainable in a Q&A, and sufficient for
-this dataset size. `baseline_reliable` is `False` when fewer than 5 non-working
-days are available; the result is still shown, but should not be presented as
-a confirmed fact.
+Это статистическое обнаружение аномалий во временном ряде, а не нейросеть —
+осознанный выбор для MVP: метод честный, объяснимый на Q&A и достаточный для
+такого объёма данных. `baseline_reliable` равен `False`, если доступно
+меньше 5 нерабочих дней; результат всё равно показывается, но не должен
+преподноситься как подтверждённый факт.
 
-Gemini is used for a different, explainable job: turning the verified numbers
-into a short action plan for a non-technical facility manager. Every number
-and date in the recommendation comes from the analysis, never from the model.
+Gemini решает другую, отдельную задачу: превращает уже проверенные цифры в
+короткий план действий для нетехнического управляющего зданием. Каждое
+число и дата в рекомендации берутся из расчёта, модель их не придумывает.
 
-## Tariffs and CO2 — an honest limitation
+## Тарифы и CO2 — честное ограничение
 
-The default tariff (17.447 KZT/kWh) is a real household tariff for the Abai
-region, cited in the project brief — **not** a confirmed rate for any specific
-school or business. `config.py` documents this plus alternate regional tariffs
-with sources; confirm the actual contracted tariff before presenting final
-numbers, and pass it via the `tariff` parameter. The default CO2 factor
-(0.85 kg/kWh) is likewise a demonstration assumption pending a confirmed
-methodology — see `config.CO2_FACTOR_TODO`.
+Тариф по умолчанию (17.447 тенге/кВт·ч) — реальный бытовой тариф Абайской
+области, указанный в брифе проекта, **но не** подтверждённая ставка для
+конкретной школы или бизнеса. `config.py` документирует это, а также
+альтернативные региональные тарифы с источниками; подтвердите реальный
+договорной тариф перед предъявлением финальных цифр и передавайте его через
+параметр `tariff`. Коэффициент CO2 по умолчанию (0.85 кг/кВт·ч) — также
+демонстрационное допущение до подтверждения методологии — см.
+`config.CO2_FACTOR_TODO`.
 
-## Deploy
+## Настройка Gemini
 
-The repo includes `render.yaml` so [Render](https://render.com) can deploy the whole app (backend +
-static frontend, no database) as a single free-tier Python web service:
+1. Скопируйте `.env.example` в `.env`.
+2. Впишите `GEMINI_API_KEY`.
+3. Никогда не коммитьте `.env`.
 
-1. Push this repo to GitHub (already done: `azitem1234-ctrl/hazkathon`).
-2. On Render: **New → Blueprint**, connect the repo — it reads `render.yaml` automatically
-   (build: `pip install -r requirements.txt`, start: `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`).
-3. In the service's **Environment** tab, set `GEMINI_API_KEY` to your key (it is declared in
-   `render.yaml` as a secret with no value, so Render will prompt for it — never commit the key itself).
-4. Deploy. Once live, confirm `/api/health`, `/api/analyze`, `/api/insight` and the dashboard at `/`
-   all work on the public `*.onrender.com` URL exactly like they do locally — `/api/insight` should
-   still return the offline-fallback recommendation if the key or network is ever unavailable on the
-   host, so a live demo never hard-fails.
-5. Paste the resulting URL into the **Live demo** line under [Quick start](#quick-start).
+Без ключа, без сети или при ошибке Gemini `/api/insight` автоматически
+возвращает офлайн-рекомендацию — демонстрация не зависит от Wi-Fi.
 
-Railway works the same way (Python service, same build/start commands, same env var) if preferred over
-Render — there's no Render-specific code, just the blueprint file.
-
-## Gemini setup
-
-1. Copy `.env.example` to `.env`.
-2. Fill in `GEMINI_API_KEY`.
-3. Never commit `.env`.
-
-Without a key, with no network, or on a Gemini error, `/api/insight`
-automatically returns the offline fallback recommendation — the demo does not
-depend on Wi-Fi.
-
-## Tests
+## Тесты
 
 ```bash
 pip install -r requirements-dev.txt
 pytest -q
 ```
 
-Covers the anomaly detector, the impact math, the calendar auto-fill, the
-offline AI fallback, and the API contract (status codes, required columns,
-tariff scaling).
+Покрывают детектор аномалий, расчёт экономии, автозаполнение календаря,
+офлайн-fallback ИИ и контракт API (коды статусов, обязательные колонки,
+масштабирование по тарифу).
 
-## Q&A prep: what each teammate should be able to explain
+## Подготовка к Q&A: что должен уметь объяснить каждый участник команды
 
-**Data and the statistical core**
+**Данные и статистическое ядро**
 
-- *Why the 25th percentile, not the mean?* The mean can be dragged up by the
-  very anomalies we're trying to catch; the 25th percentile stays closer to a
-  correctly shut-down building.
-- *Why a 1.5x threshold?* A simple, explainable MVP threshold — consumption
-  has to be clearly above baseline, not just slightly. It can become a setting
-  once there's more real history to tune against.
-- *Why can `baseline_reliable` be false?* With 1-4 non-working days you can't
-  honestly claim a norm. The code still shows a preliminary signal but does
-  not hide the weakness of the data.
-- *What happens with `is_workday` missing?* It's derived from weekends plus
-  `holidays_kz.json` (Kazakhstan public holidays and typical school breaks,
-  sourced from gov.kz). A manually supplied column always wins.
+- *Почему 25-й перцентиль, а не среднее?* Среднее может быть завышено теми
+  же аномалиями, которые мы пытаемся найти; 25-й перцентиль остаётся ближе к
+  корректно выключенному зданию.
+- *Почему порог 1.5x?* Простой, объяснимый порог для MVP — потребление
+  должно быть явно выше базового уровня, а не немного превышать его. Может
+  стать настраиваемым параметром, когда накопится больше реальной истории
+  для калибровки.
+- *Почему `baseline_reliable` может быть false?* При 1-4 нерабочих днях
+  нельзя честно утверждать норму. Код всё равно показывает предварительный
+  сигнал, но не скрывает слабость данных.
+- *Что происходит, если `is_workday` отсутствует?* Определяется по выходным
+  плюс `holidays_kz.json` (государственные праздники Казахстана и типичные
+  школьные каникулы, источник — gov.kz). Колонка, заданная вручную, всегда
+  имеет приоритет.
 
-**Gemini and the API**
+**Gemini и API**
 
-- *Why use an LLM if the math works without it?* The formula finds the
-  problem; the LLM translates it into an action a non-technical person can
-  take. It's a distinct function, not "chat for chat's sake."
-- *How do you stop Gemini from inventing numbers?* The prompt supplies only
-  verified figures from `impact`/`summary`, and the same numbers are echoed
-  back into the response by the app itself — the model's job is the narrative,
-  not the arithmetic.
-- *What happens with no internet?* `/api/insight` never 503s for that reason —
-  it returns a templated recommendation built from the same verified numbers.
-- *Why is CORS wide open?* Local development convenience only; before any
-  public deployment the allowed origin would be restricted to the app's domain.
+- *Зачем нужна LLM, если формула и так работает?* Формула находит проблему;
+  LLM переводит её в действие, понятное нетехническому человеку. Это
+  отдельная функция, а не "чат ради чата".
+- *Как вы не даёте Gemini придумывать цифры?* В промпт передаются только
+  проверенные значения из `impact`/`summary`, и те же цифры дублируются в
+  ответе самим приложением — задача модели — изложение, а не арифметика.
+- *Что происходит без интернета?* `/api/insight` никогда не вернёт `503` по
+  этой причине — он возвращает шаблонную рекомендацию, построенную на тех же
+  проверенных цифрах.
+- *Почему CORS полностью открыт?* Только для удобства локальной разработки;
+  перед любым публичным развёртыванием разрешённый origin будет ограничен
+  доменом приложения.
 
-Before the defense, each teammate should run the project locally, read "How
-the detection works" above, and be ready to answer these in their own words —
-per the hackathon's AI-policy rules, inability to explain a piece of the code
-zeroes out the technical-defense score for that fragment.
+Перед защитой каждый участник команды должен запустить проект локально,
+прочитать раздел "Как работает детекция" выше и быть готовым ответить на эти
+вопросы своими словами — по правилам AI-политики хакатона, неспособность
+объяснить фрагмент кода обнуляет баллы за техническую защиту по этому
+фрагменту.
